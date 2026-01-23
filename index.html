@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🔥 Okazje Wrocław</title>
+</head>
+<body>
+
+<h2>🔥 Elektronika – Wrocław</h2>
+
+<input id="q" placeholder="laptop / iphone / ps5">
+<input id="max" value="1500">
+<label><input type="checkbox" id="pearls"> tylko perełki</label>
+<button onclick="load()">Szukaj</button>
+
+<p id="status"></p>
+<ul id="list"></ul>
+
+<script>
+async function load() {
+  status.innerText = "⏳ Szukam…";
+  const res = await fetch(
+    "https://okazje-wroclaw.workers.dev/?q=" +
+    q.value + "&max=" + max.value +
+    "&pearls=" + (pearls.checked ? 1 : 0)
+  );
+  const data = await res.json();
+
+  list.innerHTML = "";
+  data.forEach(i => {
+    list.innerHTML += `<li>
+      ${i.pearl ? "🔥" : ""} <b>${i.source}</b><br>
+      ${i.title}<br>
+      <b>${i.price} zł</b><br>
+      <a href="${i.link}">Zobacz</a>
+    </li><hr>`;
+  });
+
+  status.innerText = "✅ Gotowe";
+}
+</script>
+
+</body>
+</html>
