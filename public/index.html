@@ -114,7 +114,7 @@
         <h2>Jak to działa z grupami Facebooka?</h2>
         <p>Facebook <b>nie udostępnia żadnego API</b> do czytania grup („Oddam za darmo Wrocław”, „Śmieciarka jedzie Wrocław” itd.), a posty widać tylko po zalogowaniu.
           Dlatego zbiera je mały skrypt w <b>Twojej</b> przeglądarce: kiedy masz otwartą grupę, wysyła widoczne posty do tej aplikacji i od razu pojawiają się w zakładce „Za darmo”.</p>
-        <p>Ten sam skrypt pomaga też z <b>OLX</b>: OLX blokuje IP większości serwerów/hostingów, więc gdy aplikacja wisi na hostingu, skrypt pobiera oferty OLX z Twojego domowego internetu. <b>Vinted</b> działa bez skryptu (z serwera).</p>
+        <p>Ten sam skrypt pomaga też z <b>OLX</b> i <b>Vinted</b>: hostingi (np. Render) często mają zablokowane IP, więc skrypt pobiera oferty z Twojego domowego internetu. Allegro Lokalnie zwykle działa bez skryptu.</p>
         <ol class="steps">
           <li>Zainstaluj rozszerzenie <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener">Tampermonkey</a> (Chrome / Firefox / Edge / Opera).</li>
           <li><span id="tokenRow" hidden>Wpisz token importu: <input id="importToken" placeholder="IMPORT_TOKEN"> i </span>kliknij:
@@ -136,6 +136,7 @@
 </main>
 
 <div class="autobar" id="autobar">
+  <span class="chip warn" id="bridgeChip"><span class="dot"></span>Most OLX: …</span>
   <label class="chk"><input type="checkbox" id="autoRefresh" checked> Auto-odświeżanie</label>
   <select id="autoInterval">
     <option value="60">co 1 min</option>
