@@ -12,6 +12,7 @@ import {
 } from '../public/shared/core.js';
 import { searchOlx, olxUrls } from './sources/olx.js';
 import { searchAllegro } from './sources/allegro.js';
+import { searchVinted } from './sources/vinted.js';
 
 export function loadConfig(env = process.env) {
   return {
@@ -19,6 +20,7 @@ export function loadConfig(env = process.env) {
     olxCityId: Number(env.OLX_CITY_ID || 19701),
     olxDistance: env.OLX_DISTANCE ? Number(env.OLX_DISTANCE) : null,
     allegroCity: env.ALLEGRO_CITY || 'wroclaw',
+    vintedCityId: env.VINTED_CITY_ID ? Number(env.VINTED_CITY_ID) : null,
     fbGroups: parseGroups(env.FB_GROUPS),
   };
 }
@@ -66,7 +68,7 @@ function statusOf(r) {
 }
 
 export function parseDealParams(q) {
-  const sources = String(q.sources || 'olx,allegro').split(',').filter(Boolean);
+  const sources = String(q.sources || 'olx,allegro,vinted').split(',').filter(Boolean);
   return {
     q: String(q.q || '').trim().slice(0, 100),
     min: num(q.min),
@@ -83,16 +85,19 @@ export async function getDeals(cfg, p) {
   const fetchSort = p.sort === 'price' ? 'price' : 'new';
   const olxOpts = { query: p.q, cityId: cfg.olxCityId, distance: cfg.olxDistance, priceFrom: p.min, priceTo: p.max, sort: fetchSort };
   const alOpts = { query: p.q, city: cfg.allegroCity, priceFrom: p.min, priceTo: p.max, sort: fetchSort };
+  const vinOpts = { query: p.q, cityId: cfg.vintedCityId, priceFrom: p.min, priceTo: p.max, sort: fetchSort };
 
   const jobs = [];
   if (p.sources.includes('olx')) jobs.push(settle('olx', searchOlx(olxOpts, p.pages)));
   if (p.sources.includes('allegro')) jobs.push(settle('allegro', searchAllegro(alOpts, p.pages)));
+  if (p.sources.includes('vinted')) jobs.push(settle('vinted', searchVinted(vinOpts, Math.min(p.pages, 2))));
 
   // Próbka rynkowa bez limitu ceny — z niej liczymy medianę, żeby wiedzieć co jest "poniżej ceny".
   const refJobs = [];
   if (p.q) {
     if (p.sources.includes('olx')) refJobs.push(settle('olx', searchOlx({ ...olxOpts, priceFrom: p.min, priceTo: undefined }, 2)));
     if (p.sources.includes('allegro')) refJobs.push(settle('allegro', searchAllegro({ ...alOpts, priceFrom: p.min, priceTo: undefined }, 1)));
+    if (p.sources.includes('vinted')) refJobs.push(settle('vinted', searchVinted({ ...vinOpts, priceFrom: p.min, priceTo: undefined }, 1)));
   }
 
   const [results, refs] = await Promise.all([Promise.all(jobs), Promise.all(refJobs)]);

@@ -17,7 +17,7 @@
     <div class="logo">🔥</div>
     <div>
       <h1>Okazje <span id="cityName">Wrocław</span></h1>
-      <p class="tagline">OLX · Allegro Lokalnie · grupy FB — tanio i za darmo</p>
+      <p class="tagline">OLX · Allegro Lokalnie · Vinted · grupy FB — tanio i za darmo</p>
     </div>
   </div>
   <nav class="tabs" role="tablist">
@@ -59,6 +59,7 @@
       <div class="field toggles">
         <label class="chk"><input type="checkbox" name="src_olx" checked> OLX</label>
         <label class="chk"><input type="checkbox" name="src_allegro" checked> Allegro Lokalnie</label>
+        <label class="chk"><input type="checkbox" name="src_vinted" checked> Vinted</label>
         <label class="chk"><input type="checkbox" name="private"> Bez firm</label>
         <label class="chk"><input type="checkbox" name="pearls"> Tylko perełki 🔥</label>
       </div>
@@ -113,11 +114,12 @@
         <h2>Jak to działa z grupami Facebooka?</h2>
         <p>Facebook <b>nie udostępnia żadnego API</b> do czytania grup („Oddam za darmo Wrocław”, „Śmieciarka jedzie Wrocław” itd.), a posty widać tylko po zalogowaniu.
           Dlatego zbiera je mały skrypt w <b>Twojej</b> przeglądarce: kiedy masz otwartą grupę, wysyła widoczne posty do tej aplikacji i od razu pojawiają się w zakładce „Za darmo”.</p>
-        <p>Ten sam skrypt pomaga też z <b>OLX</b>: OLX blokuje IP większości serwerów/hostingów, więc gdy aplikacja wisi na hostingu, skrypt pobiera oferty OLX z Twojego domowego internetu.</p>
+        <p>Ten sam skrypt pomaga też z <b>OLX</b>: OLX blokuje IP większości serwerów/hostingów, więc gdy aplikacja wisi na hostingu, skrypt pobiera oferty OLX z Twojego domowego internetu. <b>Vinted</b> działa bez skryptu (z serwera).</p>
         <ol class="steps">
           <li>Zainstaluj rozszerzenie <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener">Tampermonkey</a> (Chrome / Firefox / Edge / Opera).</li>
           <li><span id="tokenRow" hidden>Wpisz token importu: <input id="importToken" placeholder="IMPORT_TOKEN"> i </span>kliknij:
-            <a class="btn primary" id="installScript" href="/fb-import.user.js" target="_blank">⬇ Zainstaluj skrypt importu</a></li>
+            <a class="btn primary" id="installScript" href="/fb-import.user.js" target="_blank">⬇ Zainstaluj skrypt importu</a>
+            <br><span class="muted">Skrypt musi być zainstalowany też gdy masz otwartą <b>tę stronę Okazje</b> — inaczej OLX nie zadziała.</span></li>
           <li>Wejdź na grupę (linki niżej), dołącz do niej i kliknij w prawym dolnym rogu <b>„Śledź tę grupę”</b>.</li>
           <li>Zostaw kartę otwartą — skrypt sam przewija, przełącza na „Najnowsze posty” i co 10 minut odświeża grupę.</li>
         </ol>

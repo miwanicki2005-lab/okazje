@@ -136,6 +136,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px r
 }
 .src.olx { background: rgba(0, 47, 52, .85); color: #23e5db; }
 .src.allegro { background: rgba(255, 90, 0, .9); }
+.src.vinted { background: rgba(9, 178, 143, .92); }
 .src.fb { background: rgba(24, 119, 242, .92); }
 .new-badge {
   position: absolute; right: 10px; top: 10px; font-size: 10.5px; font-weight: 900; padding: 3px 7px; border-radius: 7px;

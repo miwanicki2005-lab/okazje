@@ -2,7 +2,7 @@
 
 Aplikacja webowa, która zbiera w jednym miejscu:
 
-- **💸 Okazje poniżej ceny** — oferty z **OLX** (oficjalne API JSON) i **Allegro Lokalnie** z Wrocławia poniżej podanej ceny.
+- **💸 Okazje poniżej ceny** — oferty z **OLX** (oficjalne API JSON), **Allegro Lokalnie** (Wrocław) i **Vinted** (wysyłka PL) poniżej podanej ceny.
   Przy wpisanej frazie liczy **medianę rynkową** i oznacza 🔥 **perełki** (≥30% taniej niż rynek). Filtry: cena od/do, wykluczone słowa (np. `etui, szkło`), „bez firm”, sortowanie.
 - **🎁 Za darmo** — wszystko „oddam za darmo” z OLX, Allegro Lokalnie i **grup Facebooka** (np. „Oddam za darmo Wrocław”, „Śmieciarka jedzie Wrocław”). Ogłoszenia „przyjmę / szukam” są domyślnie ukryte.
 - Auto-odświeżanie (1–15 min), znaczek **NOWE**, powiadomienia w przeglądarce o nowych rzeczach, ⭐ zapisane, ukrywanie ogłoszeń. Działa na telefonie (można dodać do ekranu głównego).

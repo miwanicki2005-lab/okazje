@@ -3,7 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { parseOlxResponse, buildOlxUrl } from '../public/shared/olx.js';
 import { parseAllegroHtml, buildAllegroUrl } from '../src/sources/allegro.js';
+import { parseVintedHtml, buildVintedUrl } from '../src/sources/vinted.js';
+import { FacebookStore } from '../src/sources/facebook.js';
 import { looksFree, looksWanted, robustMedian, applyDealFilters, annotateBelowMarket, parseWords, sortItems, interleave } from '../public/shared/core.js';
+import os from 'node:os';
+import path from 'node:path';
 
 const fixture = (f) => fs.readFileSync(new URL(`./fixtures/${f}`, import.meta.url), 'utf8');
 
@@ -94,6 +98,38 @@ test('mediana odporna na skrajne ceny i filtry ofert', () => {
   ];
   const out = applyDealFilters(items, { min: 10, max: 1200, excludeWords: parseWords('etui, szkło'), privateOnly: true });
   assert.deepEqual(out.map((i) => i.title), ['iPhone 13']);
+});
+
+test('Vinted: parsuje katalog HTML i buduje URL', () => {
+  const { items } = parseVintedHtml(fixture('vinted-rower.html'));
+  assert.ok(items.length >= 20);
+  assert.ok(items.every((i) => i.source === 'vinted' && i.price > 0 && i.url.startsWith('https://www.vinted.pl/items/')));
+  assert.ok(items.every((i) => i.image?.startsWith('https://')));
+  assert.match(items[0].title, /\w/);
+  const u = new URL(buildVintedUrl({ query: 'iphone', priceFrom: 100, priceTo: 900, page: 2, sort: 'price' }));
+  assert.equal(u.searchParams.get('search_text'), 'iphone');
+  assert.equal(u.searchParams.get('price_from'), '100');
+  assert.equal(u.searchParams.get('price_to'), '900');
+  assert.equal(u.searchParams.get('order'), 'price_low_to_high');
+  assert.equal(u.searchParams.get('page'), '2');
+});
+
+test('FB: zamienia link do zdjęcia na permalink posta', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'okz-fb-'));
+  const store = new FacebookStore(path.join(dir, 'fb.json'));
+  const r = store.import([
+    {
+      id: 'fb:Uwaga:277',
+      url: 'https://www.facebook.com/photo/?fbid=1&set=pcb.2773907126337164',
+      text: 'Oddam lampę\nKrzyki',
+      group: 'Śmieciarka',
+      groupUrl: 'https://www.facebook.com/groups/UwagaSmieciarkaJedzieWroclaw/',
+    },
+    { id: 'fb:Uwaga:x', url: 'https://www.facebook.com/groups/Uwaga/', text: 'Nowe posty', group: 'x' },
+  ]);
+  assert.equal(r.added, 1);
+  const [p] = store.list();
+  assert.equal(p.url, 'https://www.facebook.com/groups/UwagaSmieciarkaJedzieWroclaw/posts/2773907126337164/');
 });
 
 test('procent poniżej rynku pomija akcesoria za grosze', () => {
