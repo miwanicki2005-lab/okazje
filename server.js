@@ -3,7 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, getDeals, getFree, parseDealParams } from './src/app.js';
+import { matchesQuery } from './public/shared/core.js';
 import { FacebookStore } from './src/sources/facebook.js';
+import { SyncedStore } from './src/sources/synced.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, 'public');
@@ -16,6 +18,11 @@ const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/+$/, '');
 
 const cfg = loadConfig();
 const fbStore = new FacebookStore(path.join(DATA_DIR, 'facebook-posts.json'));
+const syncStore = new SyncedStore(path.join(DATA_DIR, 'synced-deals.json'));
+
+function checkImportToken(req) {
+  return !IMPORT_TOKEN || req.headers['x-import-token'] === IMPORT_TOKEN;
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -109,19 +116,53 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/health') return json(res, 200, { ok: true, uptime: process.uptime() });
 
     if (pathname === '/api/config') {
-      return json(res, 200, { ...cfg, importTokenRequired: !!IMPORT_TOKEN, fbLastImport: fbStore.lastImport });
+      return json(res, 200, {
+        ...cfg,
+        importTokenRequired: !!IMPORT_TOKEN,
+        fbLastImport: fbStore.lastImport,
+        sync: syncStore.status(),
+      });
     }
 
     if (pathname === '/api/deals' && req.method === 'GET') {
+      if (q.from === 'laptop' || q.from === 'sync') return json(res, 200, syncStore.listDeals(q));
       return json(res, 200, await getDeals(cfg, parseDealParams(q)));
     }
 
     if (pathname === '/api/free' && req.method === 'GET') {
+      if (q.from === 'laptop' || q.from === 'sync') {
+        const synced = syncStore.listFree(q);
+        const sources = String(q.sources || 'olx,allegro,fb').split(',').filter(Boolean);
+        if (sources.includes('fb')) {
+          const textQuery = String(q.q || '').trim();
+          let fb = fbStore.list();
+          if (textQuery) fb = fb.filter((it) => matchesQuery(it, textQuery));
+          synced.items = [...fb, ...synced.items];
+          synced.sources.fb = { ok: true, count: fb.length, lastImport: fbStore.lastImport };
+        }
+        return json(res, 200, synced);
+      }
       return json(res, 200, await getFree(cfg, fbStore, q));
     }
 
+    if (pathname === '/api/sync' && req.method === 'GET') {
+      return json(res, 200, syncStore.status());
+    }
+
+    if (pathname === '/api/sync' && req.method === 'POST') {
+      if (!checkImportToken(req)) return json(res, 401, { error: 'Zły token importu (IMPORT_TOKEN)' }, CORS);
+      const body = JSON.parse((await readBody(req, 4_000_000)) || '{}');
+      return json(res, 200, syncStore.push(body), CORS);
+    }
+
+    if (pathname === '/api/sync/clear' && req.method === 'POST') {
+      if (!checkImportToken(req)) return json(res, 401, { error: 'Zły token' }, CORS);
+      syncStore.clear();
+      return json(res, 200, { ok: true }, CORS);
+    }
+
     if (pathname === '/api/fb/import' && req.method === 'POST') {
-      if (IMPORT_TOKEN && req.headers['x-import-token'] !== IMPORT_TOKEN) {
+      if (!checkImportToken(req)) {
         return json(res, 401, { error: 'Zły token importu (IMPORT_TOKEN)' }, CORS);
       }
       const body = JSON.parse((await readBody(req)) || '{}');
@@ -133,7 +174,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/fb/clear' && req.method === 'POST') {
-      if (IMPORT_TOKEN && req.headers['x-import-token'] !== IMPORT_TOKEN) return json(res, 401, { error: 'Zły token' });
+      if (!checkImportToken(req)) return json(res, 401, { error: 'Zły token' });
       fbStore.clear();
       return json(res, 200, { ok: true });
     }

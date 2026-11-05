@@ -6,6 +6,7 @@ Aplikacja webowa, która zbiera w jednym miejscu:
   Przy wpisanej frazie liczy **medianę rynkową** i oznacza 🔥 **perełki** (≥30% taniej niż rynek). Filtry: cena od/do, wykluczone słowa (np. `etui, szkło`), „bez firm”, sortowanie.
 - **🎁 Za darmo** — wszystko „oddam za darmo” z OLX, Allegro Lokalnie i **grup Facebooka** (np. „Oddam za darmo Wrocław”, „Śmieciarka jedzie Wrocław”). Ogłoszenia „przyjmę / szukam” są domyślnie ukryte.
 - Auto-odświeżanie (1–15 min), znaczek **NOWE**, powiadomienia w przeglądarce o nowych rzeczach, ⭐ zapisane, ukrywanie ogłoszeń. Działa na telefonie (można dodać do ekranu głównego).
+- **Telefon (iOS):** OLX/Vinted nie lecą na żywo (brak Tampermonkey). Na laptopie odpalasz Szukaj z mostem — oferty zapisują się w `data/synced-deals.json`. Na telefonie włączasz **Z laptopa** / zaznaczasz OLX i przeglądasz ten zrzut.
 
 Zero zależności: sam Node.js (18.17+).
 
@@ -76,6 +77,8 @@ Skrypt działa tylko na grupach, które sam włączysz. Posty trzymane są w `da
 ## API
 
 - `GET /api/deals?q=iphone&min=300&max=1500&sources=olx,allegro&sort=new|price|below&private=1&exclude=etui,szkło`
+- `GET /api/deals?from=laptop&sources=olx` — oferty zrzucone z laptopa (do telefonu)
 - `GET /api/free?sources=olx,allegro,fb&q=szafa&wanted=1`
+- `POST /api/sync` — `{ deals, free, dealsMeta }` zrzut z laptopa (`X-Import-Token`)
 - `POST /api/fb/import` — `{ posts: [...] }` (nagłówek `X-Import-Token`, jeśli ustawiony)
 - `GET /api/fb`, `GET /api/health`

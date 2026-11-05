@@ -175,3 +175,54 @@ test('gdy Vinted blokuje serwer: API zwraca URL-e katalogu do mostu w przegląda
   assert.equal(body.sources.allegro.ok, true);
   assert.ok(body.fallback.vinted[0].startsWith('https://www.vinted.pl/catalog'));
 });
+
+test('zrzut z laptopa: POST /api/sync i odczyt na telefonie (from=laptop)', async () => {
+  proc.kill();
+  await new Promise((r) => setTimeout(r, 200));
+  proc = await startServer({ IMPORT_TOKEN: 'sekret' });
+  const post = (body, token) =>
+    fetch(`${BASE}/api/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { 'X-Import-Token': token } : {}) },
+      body: JSON.stringify(body),
+    });
+  const deals = [
+    {
+      id: 'olx-1',
+      source: 'olx',
+      url: 'https://www.olx.pl/d/oferta/test-1',
+      title: 'iPhone 13 Wrocław',
+      price: 1200,
+      image: 'https://example.com/a.jpg',
+    },
+    {
+      id: 'vin-1',
+      source: 'vinted',
+      url: 'https://www.vinted.pl/items/1',
+      title: 'Bluza Nike',
+      price: 40,
+    },
+    { id: 'evil', source: 'olx', url: 'javascript:alert(1)', title: 'x', price: 1 },
+  ];
+  assert.equal((await post({ deals })).status, 401);
+  const r = await (await post({ deals, dealsMeta: { q: 'iphone', marketMedian: 2000 } }, 'sekret')).json();
+  assert.equal(r.dealsUpserted, 2);
+  assert.equal(r.dealsTotal, 2);
+  assert.ok(r.lastSync);
+
+  const all = await get('/api/deals?from=laptop&sources=olx,vinted');
+  assert.equal(all.body.via, 'laptop');
+  assert.equal(all.body.items.length, 2);
+  assert.ok(all.body.items.some((i) => i.source === 'olx'));
+
+  const onlyOlx = await get('/api/deals?from=laptop&sources=olx&q=iphone&max=1500');
+  assert.equal(onlyOlx.body.items.length, 1);
+  assert.equal(onlyOlx.body.items[0].title, 'iPhone 13 Wrocław');
+
+  const cfg = await get('/api/config');
+  assert.equal(cfg.body.sync.deals, 2);
+  assert.ok(cfg.body.sync.lastSync);
+
+  const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'synced-deals.json'), 'utf8'));
+  assert.equal(saved.deals.length, 2);
+});

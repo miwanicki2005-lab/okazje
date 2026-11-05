@@ -220,7 +220,42 @@ async function mapPool(items, limit, fn) {
 }
 
 function bridgeMissingHint() {
-  return 'na tym urządzeniu niedostępne — odznacz OLX/Vinted albo szukaj na komputerze (Chrome + darmowy Tampermonkey; nie kupuj aplikacji iOS)';
+  return 'brak mostu na tym urządzeniu — oferty OLX/Vinted biorę z ostatniego zrzutu z laptopa';
+}
+
+function useLaptopFeed() {
+  return !hasBridge() || !!$('#fromLaptop')?.checked;
+}
+
+function importHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'X-Import-Token': store.get('importToken', ''),
+  };
+}
+
+async function pushSync({ deals, free, dealsMeta, freeMeta }) {
+  try {
+    const res = await fetch('/api/sync', {
+      method: 'POST',
+      headers: importHeaders(),
+      body: JSON.stringify({ deals, free, dealsMeta, freeMeta }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        toast('Żeby zrzucić oferty na telefon, wpisz <b>IMPORT_TOKEN</b> w zakładce Grupy FB (ten sam co na Renderze).', 7000);
+      }
+      throw new Error(body.error || `HTTP ${res.status}`);
+    }
+    const out = await res.json();
+    if (state.config) state.config.sync = { lastSync: out.lastSync, deals: out.dealsTotal, free: out.freeTotal };
+    updateBridgeChip();
+    return out;
+  } catch (e) {
+    console.warn('sync push', e);
+    return null;
+  }
 }
 
 async function ensureBridge() {
@@ -256,40 +291,31 @@ async function fetchVintedInBrowser(urls) {
 function updateBridgeChip() {
   const el = $('#bridgeChip');
   if (!el) return;
+  const sync = state.config?.sync;
+  const syncLabel = sync?.lastSync ? ` · zrzut ${timeAgo(sync.lastSync)}` : '';
   if (hasBridge()) {
     el.className = 'chip';
-    el.innerHTML = '<span class="dot"></span>Most OLX/Vinted: OK';
+    el.innerHTML = `<span class="dot"></span>Most OK — zrzut na telefon włączony${syncLabel}`;
   } else {
     el.className = 'chip warn';
-    el.innerHTML = '<span class="dot"></span>OLX/Vinted: tylko na komputerze';
+    el.innerHTML = `<span class="dot"></span>Telefon: oferty z laptopa${syncLabel}`;
   }
 }
 
-/** Bez mostu OLX/Vinted i tak nie zadziałają — zostaw Allegro, żeby Szukaj na iPhonie działał. */
+/** Na telefonie bez mostu: zostaw OLX/Vinted zaznaczone i czytaj zrzut z laptopa. */
 function adaptSourcesWithoutBridge() {
-  if (hasBridge()) return false;
-  let changed = false;
-  for (const sel of ['#dealsForm [name=src_olx]', '#dealsForm [name=src_vinted]', '#freeForm [name=src_olx]']) {
-    const el = $(sel);
-    if (el?.checked) {
-      el.checked = false;
-      changed = true;
-    }
+  const box = $('#fromLaptop');
+  if (box) {
+    if (!hasBridge()) box.checked = true;
+    box.disabled = !hasBridge() && !state.config?.sync?.lastSync ? false : box.disabled;
   }
-  const allegro = $('#dealsForm [name=src_allegro]');
-  if (allegro && !allegro.checked) {
-    allegro.checked = true;
-    changed = true;
-  }
-  if (changed) {
-    store.set('dealsForm', formData($('#dealsForm')));
-    store.set('freeForm', formData($('#freeForm')));
+  updateBridgeChip();
+  if (!hasBridge()) {
     toast(
-      'Na telefonie działa <b>Allegro Lokalnie</b>. OLX i Vinted tylko na komputerze (Chrome + darmowy Tampermonkey — nie kupuj wersji iOS).',
-      7000,
+      'Na telefonie widać oferty <b>zrzucone z laptopa</b> (OLX/Vinted). Od czasu do czasu odpal Szukaj na komputerze z Tampermonkey — zapisze się samo.',
+      8000,
     );
   }
-  return changed;
 }
 
 // ---------- renderowanie ----------
@@ -307,9 +333,15 @@ function renderStatus(el, meta, extra = '') {
       if (!s.lastImport) cls = 'warn';
     }
     if (s.via === 'browser') txt += ' (przez przeglądarkę)';
+    if (s.via === 'laptop') txt += ' (z laptopa)';
     return `<span class="chip ${cls}" title="${escapeHtml(title)}"><span class="dot"></span>${SOURCE_NAMES[name] || name}: ${txt}</span>`;
   });
-  const when = meta.fetchedAt ? `<span class="muted">· odświeżono ${new Date(meta.fetchedAt).toLocaleTimeString('pl-PL')}</span>` : '';
+  const syncWhen = meta.via === 'laptop' && meta.lastSync
+    ? `<span class="muted">· zrzut z laptopa ${timeAgo(meta.lastSync)}</span>`
+    : meta.fetchedAt
+      ? `<span class="muted">· odświeżono ${new Date(meta.fetchedAt).toLocaleTimeString('pl-PL')}</span>`
+      : '';
+  const when = syncWhen;
   const errors = Object.entries(meta.sources || {})
     .filter(([, s]) => !s.ok && s.error)
     .map(([name, s]) => `<div class="notice">⚠ ${SOURCE_NAMES[name] || name}: ${escapeHtml(s.error)}</div>`);
@@ -439,7 +471,8 @@ function visibleDealItems() {
 
 async function loadDeals({ silent = false } = {}) {
   const { f, p } = dealsParams();
-  if (!f.q.trim() && f.max === '') {
+  const laptop = useLaptopFeed();
+  if (!laptop && !f.q.trim() && f.max === '') {
     $('#dealsEmpty').hidden = false;
     $('#dealsEmpty').innerHTML =
       'Wpisz czego szukasz i/lub <b>maksymalną cenę</b> — pokażę oferty z Wrocławia poniżej tej ceny, a przy wpisanej frazie policzę też <b>medianę rynkową</b> i oznaczę 🔥 perełki tańsze o 30%+.' +
@@ -461,11 +494,25 @@ async function loadDeals({ silent = false } = {}) {
   if (!silent) skeleton($('#dealsGrid'));
   $('#dealsEmpty').hidden = true;
   try {
+    if (laptop) p.set('from', 'laptop');
     const data = await api(`/api/deals?${p}`);
-    if (data.fallback?.olx || data.fallback?.vinted) await dealsBrowserFallback(data, f);
+    if (!laptop && (data.fallback?.olx || data.fallback?.vinted)) await dealsBrowserFallback(data, f);
     state.deals.items = data.items;
     state.deals.meta = data;
     state.deals.loaded = true;
+    if (!laptop && hasBridge() && data.items.length) {
+      const pushed = await pushSync({
+        deals: data.items,
+        dealsMeta: {
+          q: f.q,
+          min: f.min,
+          max: f.max,
+          marketMedian: data.marketMedian,
+          marketSample: data.marketSample,
+        },
+      });
+      if (pushed && !silent) toast(`Zapisano ${pushed.dealsUpserted} ofert na telefon (łącznie ${pushed.dealsTotal}).`);
+    }
     return renderDeals(silent);
   } catch (e) {
     $('#dealsGrid').innerHTML = '';
@@ -545,9 +592,8 @@ function renderDeals(silent) {
   const newCount = renderGrid($('#dealsGrid'), items);
   $('#dealsEmpty').hidden = items.length > 0;
   if (!items.length) {
-    const noBridge = !hasBridge();
-    $('#dealsEmpty').innerHTML = noBridge
-      ? 'Brak ofert Allegro dla tych filtrów. OLX/Vinted na iPhonie nie działają — odznacz je albo szukaj na komputerze (Chrome + darmowy Tampermonkey).'
+    $('#dealsEmpty').innerHTML = useLaptopFeed()
+      ? 'Brak ofert w zrzucie z laptopa. Na komputerze (Chrome + darmowy Tampermonkey) odpal <b>Szukaj</b> — oferty OLX/Vinted zapiszą się same i pojawią się tu.'
       : 'Brak ofert dla tych filtrów. Spróbuj podnieść cenę albo zmienić frazę.';
   }
   updateBadges();
@@ -573,14 +619,27 @@ async function loadFree({ silent = false } = {}) {
   if (state.free.loading) return 0;
   state.free.loading = true;
   const { f, p } = freeParams();
+  const laptop = useLaptopFeed();
   const btn = $('#freeForm button[type=submit]');
   btn.disabled = true;
   if (!silent) skeleton($('#freeGrid'));
   try {
+    if (laptop) p.set('from', 'laptop');
     const data = await api(`/api/free?${p}`);
-    if (data.fallback?.olx) {
+    if (!laptop && data.fallback?.olx) {
       if (!hasBridge()) {
-        data.sources.olx = { ok: false, count: 0, error: bridgeMissingHint() };
+        // Dołóż OLX z ostatniego zrzutu, Allegro/FB zostają z API.
+        try {
+          const synced = await api(`/api/free?${new URLSearchParams({ ...Object.fromEntries(p), from: 'laptop', sources: 'olx' })}`);
+          if (synced.items?.length) {
+            data.items = sortItems(dedupe(interleave([data.items, synced.items])), 'new');
+            data.sources.olx = { ok: true, count: synced.items.length, via: 'laptop' };
+          } else {
+            data.sources.olx = { ok: false, count: 0, error: bridgeMissingHint() };
+          }
+        } catch {
+          data.sources.olx = { ok: false, count: 0, error: bridgeMissingHint() };
+        }
       } else {
         try {
           let olx = (await fetchOlxInBrowser(data.fallback.olx)).filter((it) => it.free);
@@ -596,6 +655,10 @@ async function loadFree({ silent = false } = {}) {
     state.free.items = data.items;
     state.free.meta = data;
     state.free.loaded = true;
+    if (!laptop && hasBridge()) {
+      const freeItems = data.items.filter((it) => it.source === 'olx' || it.source === 'allegro');
+      if (freeItems.length) await pushSync({ free: freeItems, freeMeta: { q: f.q } });
+    }
     return renderFree(silent);
   } catch (e) {
     $('#freeGrid').innerHTML = '';
@@ -693,6 +756,11 @@ $('#freeForm').onsubmit = (e) => {
 $('#dealsForm [name=pearls]').onchange = () => state.deals.loaded && renderDeals(false);
 $('#freeForm [name=unseen]').onchange = () => state.free.loaded && renderFree(false);
 $('#dealsForm [name=sort]').onchange = () => state.deals.loaded && loadDeals();
+$('#fromLaptop').onchange = () => {
+  store.set('fromLaptop', $('#fromLaptop').checked);
+  loadDeals();
+  if (state.free.loaded) loadFree();
+};
 
 // ---------- auto-odświeżanie i powiadomienia ----------
 let nextRefresh = 0;
@@ -771,18 +839,23 @@ $('#notifyBtn').onclick = async () => {
 (async function init() {
   fillForm($('#dealsForm'), store.get('dealsForm', null));
   fillForm($('#freeForm'), store.get('freeForm', null));
+  const savedLaptop = store.get('fromLaptop', null);
+  if (savedLaptop != null) $('#fromLaptop').checked = !!savedLaptop;
   updateNotifyBtn();
   updateBridgeChip();
-  waitForBridge(2500).then(() => {
-    updateBridgeChip();
-    adaptSourcesWithoutBridge();
-  });
   try {
     state.config = await api('/api/config');
     $('#cityName').textContent = state.config.cityName;
   } catch {
     toast('Nie mogę połączyć się z serwerem aplikacji.', 8000);
   }
+  await waitForBridge(2500);
+  updateBridgeChip();
+  if (!hasBridge()) {
+    $('#fromLaptop').checked = true;
+    store.set('fromLaptop', true);
+  }
+  adaptSourcesWithoutBridge();
   scheduleNext();
   setInterval(autoTick, 1000);
   showTab(location.hash.slice(1) || store.get('tab', 'deals'));

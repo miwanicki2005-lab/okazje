@@ -62,6 +62,7 @@
         <label class="chk"><input type="checkbox" name="src_vinted" checked> Vinted</label>
         <label class="chk"><input type="checkbox" name="private"> Bez firm</label>
         <label class="chk"><input type="checkbox" name="pearls"> Tylko perełki 🔥</label>
+        <label class="chk" title="Telefon czyta oferty zapisane z laptopa"><input type="checkbox" id="fromLaptop" name="from_laptop"> Z laptopa</label>
       </div>
       <div class="field actions">
         <button class="btn primary" type="submit">Szukaj</button>
@@ -114,11 +115,11 @@
         <h2>Jak to działa z grupami Facebooka?</h2>
         <p>Facebook <b>nie udostępnia żadnego API</b> do czytania grup („Oddam za darmo Wrocław”, „Śmieciarka jedzie Wrocław” itd.), a posty widać tylko po zalogowaniu.
           Dlatego zbiera je mały skrypt w <b>Twojej</b> przeglądarce: kiedy masz otwartą grupę, wysyła widoczne posty do tej aplikacji i od razu pojawiają się w zakładce „Za darmo”.</p>
-        <p>Ten sam skrypt pomaga też z <b>OLX</b> i <b>Vinted</b>: hostingi (np. Render) często mają zablokowane IP, więc skrypt pobiera oferty z Twojego domowego internetu. <b>Allegro Lokalnie działa bez skryptu</b> — także na iPhonie.</p>
-        <p class="muted"><b>iPhone / iPad:</b> nie kupuj płatnego Tampermonkey z App Store. Na iOS skrypt nie zadziała. Szukaj Allegro w Safari; OLX, Vinted i grupy FB odpalaj na komputerze (Chrome + darmowe rozszerzenie).</p>
+        <p>Ten sam skrypt pomaga też z <b>OLX</b> i <b>Vinted</b>: hostingi (np. Render) często mają zablokowane IP, więc skrypt pobiera oferty z Twojego domowego internetu i <b>zrzuca je na serwer</b>. Na iPhonie zaznaczasz źródło OLX / tryb <b>Z laptopa</b> i widzisz te same oferty — bez Tampermonkey.</p>
+        <p class="muted"><b>iPhone:</b> nie kupuj Tampermonkey z App Store. Od czasu do czasu odpal <b>Szukaj na laptopie</b> (Chrome + darmowe rozszerzenie) — zapisze się samo. Potem na telefonie klikasz OLX i przeglądasz.</p>
         <ol class="steps">
           <li>Na <b>komputerze</b> zainstaluj darmowe rozszerzenie <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener">Tampermonkey</a> (Chrome / Firefox / Edge / Opera) — nie wersję iOS.</li>
-          <li><span id="tokenRow" hidden>Wpisz token importu: <input id="importToken" placeholder="IMPORT_TOKEN"> i </span>kliknij:
+          <li><span id="tokenRow" hidden>Wpisz token importu: <input id="importToken" placeholder="IMPORT_TOKEN"> (ten sam co na Renderze) i </span>kliknij:
             <a class="btn primary" id="installScript" href="/fb-import.user.js" target="_blank">⬇ Zainstaluj skrypt importu</a>
             <br><span class="muted">Skrypt musi być włączony też na karcie z <b>tą stroną Okazje</b> — inaczej OLX/Vinted nie przejdą przez most.</span></li>
           <li>Wejdź na grupę (linki niżej), dołącz do niej i kliknij w prawym dolnym rogu <b>„Śledź tę grupę”</b>.</li>
