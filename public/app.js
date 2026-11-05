@@ -219,14 +219,49 @@ async function mapPool(items, limit, fn) {
   return out;
 }
 
+function bridgeMissingHint() {
+  return 'brak mostu na tym urządzeniu — oferty OLX/Vinted biorę z ostatniego zrzutu z laptopa';
+}
+
+function useLaptopFeed() {
+  return !hasBridge() || !!$('#fromLaptop')?.checked;
+}
+
+function importHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'X-Import-Token': store.get('importToken', ''),
+  };
+}
+
+async function pushSync({ deals, free, dealsMeta, freeMeta }) {
+  try {
+    const res = await fetch('/api/sync', {
+      method: 'POST',
+      headers: importHeaders(),
+      body: JSON.stringify({ deals, free, dealsMeta, freeMeta }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        toast('Żeby zrzucić oferty na telefon, wpisz <b>IMPORT_TOKEN</b> w zakładce Grupy FB (ten sam co na Renderze).', 7000);
+      }
+      throw new Error(body.error || `HTTP ${res.status}`);
+    }
+    const out = await res.json();
+    if (state.config) state.config.sync = { lastSync: out.lastSync, deals: out.dealsTotal, free: out.freeTotal };
+    updateBridgeChip();
+    return out;
+  } catch (e) {
+    console.warn('sync push', e);
+    return null;
+  }
+}
+
 async function ensureBridge() {
   const ready = await waitForBridge();
   updateBridgeChip();
-  if (!ready && !hasBridge()) {
-    throw new Error(
-      'brak skryptu Tampermonkey na tej stronie — zakładka „Grupy FB” → zainstaluj skrypt (v1.4+), odśwież tę kartę',
-    );
-  }
+  if (!ready && !hasBridge()) throw new Error(bridgeMissingHint());
 }
 
 async function fetchOlxInBrowser(urls) {
@@ -256,12 +291,30 @@ async function fetchVintedInBrowser(urls) {
 function updateBridgeChip() {
   const el = $('#bridgeChip');
   if (!el) return;
+  const sync = state.config?.sync;
+  const syncLabel = sync?.lastSync ? ` · zrzut ${timeAgo(sync.lastSync)}` : '';
   if (hasBridge()) {
     el.className = 'chip';
-    el.innerHTML = '<span class="dot"></span>Most OLX/Vinted: OK';
+    el.innerHTML = `<span class="dot"></span>Most OK — zrzut na telefon włączony${syncLabel}`;
   } else {
     el.className = 'chip warn';
-    el.innerHTML = '<span class="dot"></span>Most: brak skryptu';
+    el.innerHTML = `<span class="dot"></span>Telefon: oferty z laptopa${syncLabel}`;
+  }
+}
+
+/** Na telefonie bez mostu: zostaw OLX/Vinted zaznaczone i czytaj zrzut z laptopa. */
+function adaptSourcesWithoutBridge() {
+  const box = $('#fromLaptop');
+  if (box) {
+    if (!hasBridge()) box.checked = true;
+    box.disabled = !hasBridge() && !state.config?.sync?.lastSync ? false : box.disabled;
+  }
+  updateBridgeChip();
+  if (!hasBridge()) {
+    toast(
+      'Na telefonie widać oferty <b>zrzucone z laptopa</b> (OLX/Vinted). Od czasu do czasu odpal Szukaj na komputerze z Tampermonkey — zapisze się samo.',
+      8000,
+    );
   }
 }
 
@@ -280,9 +333,15 @@ function renderStatus(el, meta, extra = '') {
       if (!s.lastImport) cls = 'warn';
     }
     if (s.via === 'browser') txt += ' (przez przeglądarkę)';
+    if (s.via === 'laptop') txt += ' (z laptopa)';
     return `<span class="chip ${cls}" title="${escapeHtml(title)}"><span class="dot"></span>${SOURCE_NAMES[name] || name}: ${txt}</span>`;
   });
-  const when = meta.fetchedAt ? `<span class="muted">· odświeżono ${new Date(meta.fetchedAt).toLocaleTimeString('pl-PL')}</span>` : '';
+  const syncWhen = meta.via === 'laptop' && meta.lastSync
+    ? `<span class="muted">· zrzut z laptopa ${timeAgo(meta.lastSync)}</span>`
+    : meta.fetchedAt
+      ? `<span class="muted">· odświeżono ${new Date(meta.fetchedAt).toLocaleTimeString('pl-PL')}</span>`
+      : '';
+  const when = syncWhen;
   const errors = Object.entries(meta.sources || {})
     .filter(([, s]) => !s.ok && s.error)
     .map(([name, s]) => `<div class="notice">⚠ ${SOURCE_NAMES[name] || name}: ${escapeHtml(s.error)}</div>`);
@@ -412,7 +471,8 @@ function visibleDealItems() {
 
 async function loadDeals({ silent = false } = {}) {
   const { f, p } = dealsParams();
-  if (!f.q.trim() && f.max === '') {
+  const laptop = useLaptopFeed();
+  if (!laptop && !f.q.trim() && f.max === '') {
     $('#dealsEmpty').hidden = false;
     $('#dealsEmpty').innerHTML =
       'Wpisz czego szukasz i/lub <b>maksymalną cenę</b> — pokażę oferty z Wrocławia poniżej tej ceny, a przy wpisanej frazie policzę też <b>medianę rynkową</b> i oznaczę 🔥 perełki tańsze o 30%+.' +
@@ -434,11 +494,25 @@ async function loadDeals({ silent = false } = {}) {
   if (!silent) skeleton($('#dealsGrid'));
   $('#dealsEmpty').hidden = true;
   try {
+    if (laptop) p.set('from', 'laptop');
     const data = await api(`/api/deals?${p}`);
-    if (data.fallback?.olx || data.fallback?.vinted) await dealsBrowserFallback(data, f);
+    if (!laptop && (data.fallback?.olx || data.fallback?.vinted)) await dealsBrowserFallback(data, f);
     state.deals.items = data.items;
     state.deals.meta = data;
     state.deals.loaded = true;
+    if (!laptop && hasBridge() && data.items.length) {
+      const pushed = await pushSync({
+        deals: data.items,
+        dealsMeta: {
+          q: f.q,
+          min: f.min,
+          max: f.max,
+          marketMedian: data.marketMedian,
+          marketSample: data.marketSample,
+        },
+      });
+      if (pushed && !silent) toast(`Zapisano ${pushed.dealsUpserted} ofert na telefon (łącznie ${pushed.dealsTotal}).`);
+    }
     return renderDeals(silent);
   } catch (e) {
     $('#dealsGrid').innerHTML = '';
@@ -459,32 +533,40 @@ async function dealsBrowserFallback(data, f) {
   const refPrices = [];
 
   if (data.fallback?.olx) {
-    try {
-      const [main, ref] = await Promise.all([
-        fetchOlxInBrowser(data.fallback.olx),
-        data.fallback.olxRef?.length ? fetchOlxInBrowser(data.fallback.olxRef).catch(() => []) : [],
-      ]);
-      ref.forEach((it) => it.price > 0 && !it.free && refPrices.push(it.price));
-      const olx = applyDealFilters(main, { min: num(f.min), max: num(f.max), excludeWords, privateOnly: f.private });
-      lists.push(olx);
-      data.sources.olx = { ok: true, count: olx.length, via: 'browser' };
-    } catch (e) {
-      data.sources.olx.error = `OLX blokuje IP serwera (${e.message}).`;
+    if (!hasBridge()) {
+      data.sources.olx = { ok: false, count: 0, error: bridgeMissingHint() };
+    } else {
+      try {
+        const [main, ref] = await Promise.all([
+          fetchOlxInBrowser(data.fallback.olx),
+          data.fallback.olxRef?.length ? fetchOlxInBrowser(data.fallback.olxRef).catch(() => []) : [],
+        ]);
+        ref.forEach((it) => it.price > 0 && !it.free && refPrices.push(it.price));
+        const olx = applyDealFilters(main, { min: num(f.min), max: num(f.max), excludeWords, privateOnly: f.private });
+        lists.push(olx);
+        data.sources.olx = { ok: true, count: olx.length, via: 'browser' };
+      } catch (e) {
+        data.sources.olx.error = e.message;
+      }
     }
   }
 
   if (data.fallback?.vinted) {
-    try {
-      const [main, ref] = await Promise.all([
-        fetchVintedInBrowser(data.fallback.vinted),
-        data.fallback.vintedRef?.length ? fetchVintedInBrowser(data.fallback.vintedRef).catch(() => []) : [],
-      ]);
-      ref.forEach((it) => it.price > 0 && refPrices.push(it.price));
-      const vinted = applyDealFilters(main, { min: num(f.min), max: num(f.max), excludeWords, privateOnly: f.private });
-      lists.push(vinted);
-      data.sources.vinted = { ok: true, count: vinted.length, via: 'browser' };
-    } catch (e) {
-      data.sources.vinted.error = `Vinted blokuje IP serwera (${e.message}).`;
+    if (!hasBridge()) {
+      data.sources.vinted = { ok: false, count: 0, error: bridgeMissingHint() };
+    } else {
+      try {
+        const [main, ref] = await Promise.all([
+          fetchVintedInBrowser(data.fallback.vinted),
+          data.fallback.vintedRef?.length ? fetchVintedInBrowser(data.fallback.vintedRef).catch(() => []) : [],
+        ]);
+        ref.forEach((it) => it.price > 0 && refPrices.push(it.price));
+        const vinted = applyDealFilters(main, { min: num(f.min), max: num(f.max), excludeWords, privateOnly: f.private });
+        lists.push(vinted);
+        data.sources.vinted = { ok: true, count: vinted.length, via: 'browser' };
+      } catch (e) {
+        data.sources.vinted.error = e.message;
+      }
     }
   }
 
@@ -509,7 +591,11 @@ function renderDeals(silent) {
   } else market.hidden = true;
   const newCount = renderGrid($('#dealsGrid'), items);
   $('#dealsEmpty').hidden = items.length > 0;
-  if (!items.length) $('#dealsEmpty').innerHTML = 'Brak ofert dla tych filtrów. Spróbuj podnieść cenę albo zmienić frazę.';
+  if (!items.length) {
+    $('#dealsEmpty').innerHTML = useLaptopFeed()
+      ? 'Brak ofert w zrzucie z laptopa. Na komputerze (Chrome + darmowy Tampermonkey) odpal <b>Szukaj</b> — oferty OLX/Vinted zapiszą się same i pojawią się tu.'
+      : 'Brak ofert dla tych filtrów. Spróbuj podnieść cenę albo zmienić frazę.';
+  }
   updateBadges();
   return silent ? newCount : 0;
 }
@@ -533,25 +619,46 @@ async function loadFree({ silent = false } = {}) {
   if (state.free.loading) return 0;
   state.free.loading = true;
   const { f, p } = freeParams();
+  const laptop = useLaptopFeed();
   const btn = $('#freeForm button[type=submit]');
   btn.disabled = true;
   if (!silent) skeleton($('#freeGrid'));
   try {
+    if (laptop) p.set('from', 'laptop');
     const data = await api(`/api/free?${p}`);
-    if (data.fallback?.olx) {
-      try {
-        let olx = (await fetchOlxInBrowser(data.fallback.olx)).filter((it) => it.free);
-        olx = applyFreeFilters(olx, { hideWanted: !f.wanted, excludeWords: parseWords(f.exclude) });
-        if (f.q.trim()) olx = olx.filter((it) => matchesQuery(it, f.q));
-        data.items = sortItems(dedupe(interleave([data.items, olx])), 'new');
-        data.sources.olx = { ok: true, count: olx.length, via: 'browser' };
-      } catch (e) {
-        data.sources.olx.error = `OLX blokuje IP serwera (${e.message}).`;
+    if (!laptop && data.fallback?.olx) {
+      if (!hasBridge()) {
+        // Dołóż OLX z ostatniego zrzutu, Allegro/FB zostają z API.
+        try {
+          const synced = await api(`/api/free?${new URLSearchParams({ ...Object.fromEntries(p), from: 'laptop', sources: 'olx' })}`);
+          if (synced.items?.length) {
+            data.items = sortItems(dedupe(interleave([data.items, synced.items])), 'new');
+            data.sources.olx = { ok: true, count: synced.items.length, via: 'laptop' };
+          } else {
+            data.sources.olx = { ok: false, count: 0, error: bridgeMissingHint() };
+          }
+        } catch {
+          data.sources.olx = { ok: false, count: 0, error: bridgeMissingHint() };
+        }
+      } else {
+        try {
+          let olx = (await fetchOlxInBrowser(data.fallback.olx)).filter((it) => it.free);
+          olx = applyFreeFilters(olx, { hideWanted: !f.wanted, excludeWords: parseWords(f.exclude) });
+          if (f.q.trim()) olx = olx.filter((it) => matchesQuery(it, f.q));
+          data.items = sortItems(dedupe(interleave([data.items, olx])), 'new');
+          data.sources.olx = { ok: true, count: olx.length, via: 'browser' };
+        } catch (e) {
+          data.sources.olx.error = e.message;
+        }
       }
     }
     state.free.items = data.items;
     state.free.meta = data;
     state.free.loaded = true;
+    if (!laptop && hasBridge()) {
+      const freeItems = data.items.filter((it) => it.source === 'olx' || it.source === 'allegro');
+      if (freeItems.length) await pushSync({ free: freeItems, freeMeta: { q: f.q } });
+    }
     return renderFree(silent);
   } catch (e) {
     $('#freeGrid').innerHTML = '';
@@ -649,6 +756,11 @@ $('#freeForm').onsubmit = (e) => {
 $('#dealsForm [name=pearls]').onchange = () => state.deals.loaded && renderDeals(false);
 $('#freeForm [name=unseen]').onchange = () => state.free.loaded && renderFree(false);
 $('#dealsForm [name=sort]').onchange = () => state.deals.loaded && loadDeals();
+$('#fromLaptop').onchange = () => {
+  store.set('fromLaptop', $('#fromLaptop').checked);
+  loadDeals();
+  if (state.free.loaded) loadFree();
+};
 
 // ---------- auto-odświeżanie i powiadomienia ----------
 let nextRefresh = 0;
@@ -727,16 +839,24 @@ $('#notifyBtn').onclick = async () => {
 (async function init() {
   fillForm($('#dealsForm'), store.get('dealsForm', null));
   fillForm($('#freeForm'), store.get('freeForm', null));
+  const savedLaptop = store.get('fromLaptop', null);
+  if (savedLaptop != null) $('#fromLaptop').checked = !!savedLaptop;
   updateNotifyBtn();
   updateBridgeChip();
-  waitForBridge(3000).then(updateBridgeChip);
   try {
     state.config = await api('/api/config');
     $('#cityName').textContent = state.config.cityName;
   } catch {
-    toast('Nie mogę połączyć się z serwerem aplikacji. Czy uruchomiłeś <b>npm start</b>?', 8000);
+    toast('Nie mogę połączyć się z serwerem aplikacji.', 8000);
   }
+  await waitForBridge(2500);
+  updateBridgeChip();
+  if (!hasBridge()) {
+    $('#fromLaptop').checked = true;
+    store.set('fromLaptop', true);
+  }
+  adaptSourcesWithoutBridge();
   scheduleNext();
   setInterval(autoTick, 1000);
-  showTab(location.hash.slice(1) || store.get('tab', 'free'));
+  showTab(location.hash.slice(1) || store.get('tab', 'deals'));
 })();
