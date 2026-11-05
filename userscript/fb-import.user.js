@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Okazje — import z grup FB (oddam za darmo / śmieciarka jedzie)
 // @namespace    okazje-wroclaw
-// @version      1.4.1
+// @version      1.4.2
 // @description  Zbiera posty z grup FB i mostkuje OLX + Vinted z Twojego IP (gdy hosting jest zablokowany).
 // @match        https://www.facebook.com/groups/*
 // @match        https://web.facebook.com/groups/*
@@ -24,6 +24,23 @@
   // Na stronie aplikacji skrypt działa jako most do OLX/Vinted: pobiera z Twojego domowego IP
   // (hostingi są często blokowane, a z przeglądarki CORS nie pozwala).
   if (!/facebook\.com$/.test(location.hostname)) {
+    const setStatus = (html) => {
+      const el = document.getElementById('okz-br-st');
+      if (el) el.innerHTML = html;
+    };
+
+    // Vinted katalog to ~3–4 MB HTML — postMessage całego dokumentu wiesza stronę (timeout).
+    // Wycinamy tylko fragment z productItem, parserowi to wystarczy.
+    function shrinkBody(url, text) {
+      if (!text) return '';
+      if (!String(url).includes('vinted.pl/catalog')) return text;
+      let i = text.indexOf('\\"productItem\\"');
+      if (i < 0) i = text.indexOf('"productItem"');
+      if (i < 0) return text.slice(0, 200000);
+      const from = Math.max(0, i - 80);
+      return text.slice(from, from + 450000);
+    }
+
     const reply = (id, status, body, err) =>
       window.postMessage({ type: 'okz-fetch-result', id, status, body: body || '', err: err || null }, location.origin);
 
@@ -42,7 +59,7 @@
       const m = e.data;
       if (e.source !== window || !m) return;
       if (m.type === 'okz-bridge-ping') {
-        window.postMessage({ type: 'okz-bridge-ready', version: '1.4.1' }, location.origin);
+        window.postMessage({ type: 'okz-bridge-ready', version: '1.4.2' }, location.origin);
         return;
       }
       // okz-olx-fetch zostawione dla kompatybilności ze starą stroną
@@ -52,6 +69,7 @@
         reply(m.id, 0, '', 'zły URL (dozwolone: OLX API / Vinted katalog)');
         return;
       }
+      setStatus(`Szukam: ${meta.label}…`);
       GM_xmlhttpRequest({
         method: 'GET',
         url: m.url,
@@ -61,21 +79,34 @@
           Referer: meta.referer,
         },
         anonymous: false,
-        timeout: 20000,
-        onload: (r) => reply(m.id, r.status, r.responseText, r.status >= 400 ? `HTTP ${r.status}` : null),
-        onerror: () =>
+        timeout: 25000,
+        onload: (r) => {
+          const body = shrinkBody(m.url, r.responseText || '');
+          setStatus(
+            r.status >= 200 && r.status < 300
+              ? `<span style="color:#3ee08f">✓ ${meta.label} → strona (${Math.round(body.length / 1024)} KB)</span>`
+              : `<span style="color:#ff8a8a">✗ ${meta.label} HTTP ${r.status}</span>`,
+          );
+          reply(m.id, r.status, body, r.status >= 400 ? `HTTP ${r.status}` : null);
+        },
+        onerror: () => {
+          setStatus(`<span style="color:#ff8a8a">✗ ${meta.label}: brak połączenia</span>`);
           reply(
             m.id,
             0,
             '',
             `brak połączenia z ${meta.label} (w Tampermonkey zezwól na domenę i otwórz raz stronę w tej przeglądarce)`,
-          ),
-        ontimeout: () => reply(m.id, 0, '', `timeout ${meta.label} — otwórz stronę w nowej karcie i spróbuj ponownie`),
+          );
+        },
+        ontimeout: () => {
+          setStatus(`<span style="color:#ff8a8a">✗ ${meta.label}: timeout</span>`);
+          reply(m.id, 0, '', `timeout ${meta.label} — otwórz stronę w nowej karcie i spróbuj ponownie`);
+        },
       });
     });
     const mark = () => {
       document.documentElement.dataset.okzBridge = '1';
-      window.postMessage({ type: 'okz-bridge-ready', version: '1.4.1' }, location.origin);
+      window.postMessage({ type: 'okz-bridge-ready', version: '1.4.2' }, location.origin);
     };
     mark();
     document.addEventListener('DOMContentLoaded', mark);
@@ -89,7 +120,7 @@
         'position:fixed;left:16px;bottom:16px;z-index:2147483647;background:#0f1220;color:#e8ecff;font:12px/1.4 system-ui,sans-serif;' +
         'border:1px solid #2b3158;border-radius:12px;padding:10px 12px;box-shadow:0 10px 30px rgba(0,0,0,.45);max-width:280px';
       box.innerHTML =
-        '<b>Most Okazje v1.4.1</b><div id="okz-br-st" style="opacity:.85;margin:6px 0">Gotowy — kliknij test.</div>' +
+        '<b>Most Okazje v1.4.2</b><div id="okz-br-st" style="opacity:.85;margin:6px 0">Gotowy — kliknij test albo Szukaj.</div>' +
         '<button id="okz-br-vin" style="margin:2px 4px 0 0;background:#1f6f4a;color:#fff;border:0;border-radius:8px;padding:5px 8px;cursor:pointer">Test Vinted</button>' +
         '<button id="okz-br-olx" style="margin:2px 0 0;background:#1d2442;color:#fff;border:0;border-radius:8px;padding:5px 8px;cursor:pointer">Test OLX</button>';
       document.documentElement.appendChild(box);
@@ -101,11 +132,12 @@
           url,
           headers: { Accept: '*/*', 'Accept-Language': 'pl-PL,pl;q=0.9', Referer: url.split('/').slice(0, 3).join('/') + '/' },
           anonymous: false,
-          timeout: 20000,
+          timeout: 25000,
           onload: (r) => {
+            const body = shrinkBody(url, r.responseText || '');
             st().innerHTML =
               r.status >= 200 && r.status < 300
-                ? `<span style="color:#3ee08f">✓ ${label} OK (HTTP ${r.status}, ${Math.round((r.responseText || '').length / 1024)} KB)</span>`
+                ? `<span style="color:#3ee08f">✓ ${label} OK (HTTP ${r.status}, ${Math.round(body.length / 1024)} KB po obcięciu)</span>`
                 : `<span style="color:#ff8a8a">✗ ${label} HTTP ${r.status}</span>`;
           },
           onerror: () => {
