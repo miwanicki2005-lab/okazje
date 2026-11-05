@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { parseOlxResponse, buildOlxUrl } from '../public/shared/olx.js';
 import { parseAllegroHtml, buildAllegroUrl } from '../src/sources/allegro.js';
-import { parseVintedHtml, buildVintedUrl } from '../src/sources/vinted.js';
+import { parseVintedHtml, buildVintedUrl } from '../public/shared/vinted.js';
 import { FacebookStore } from '../src/sources/facebook.js';
 import { looksFree, looksWanted, robustMedian, applyDealFilters, annotateBelowMarket, parseWords, sortItems, interleave } from '../public/shared/core.js';
 import os from 'node:os';

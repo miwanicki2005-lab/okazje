@@ -12,7 +12,7 @@ import {
 } from '../public/shared/core.js';
 import { searchOlx, olxUrls } from './sources/olx.js';
 import { searchAllegro } from './sources/allegro.js';
-import { searchVinted } from './sources/vinted.js';
+import { searchVinted, vintedUrls } from './sources/vinted.js';
 
 export function loadConfig(env = process.env) {
   return {
@@ -117,12 +117,22 @@ export async function getDeals(cfg, p) {
 
   const sources = Object.fromEntries(results.map((r) => [r.name, statusOf(r)]));
   const olx = results.find((r) => r.name === 'olx');
+  const vinted = results.find((r) => r.name === 'vinted');
+  const fallback = {};
+  if (olx?.blocked) {
+    fallback.olx = olxUrls(olxOpts, Math.min(p.pages, 2));
+    fallback.olxRef = p.q ? olxUrls({ ...olxOpts, priceTo: undefined }, 1) : [];
+  }
+  if (vinted?.blocked) {
+    fallback.vinted = vintedUrls(vinOpts, 1);
+    fallback.vintedRef = p.q ? vintedUrls({ ...vinOpts, priceTo: undefined }, 1) : [];
+  }
   return {
     items,
     marketMedian,
     marketSample: refPrices.length,
     sources,
-    fallback: olx && olx.blocked ? { olx: olxUrls(olxOpts, p.pages), olxRef: p.q ? olxUrls({ ...olxOpts, priceTo: undefined }, 2) : [] } : null,
+    fallback: Object.keys(fallback).length ? fallback : null,
     fetchedAt: new Date().toISOString(),
   };
 }
@@ -173,7 +183,16 @@ export async function getFree(cfg, fbStore, q) {
   return {
     items,
     sources: status,
-    fallback: olx && olx.blocked ? { olx: freeOlxQueries(cfg).flatMap(({ opts, pages }) => olxUrls(opts, pages)) } : null,
+    // Do mostu w przeglądarce wystarczy kilka zapytań — za dużo naraz kończy się timeoutem OLX.
+    fallback: olx && olx.blocked
+      ? {
+          olx: [
+            ...olxUrls({ cityId: cfg.olxCityId, distance: cfg.olxDistance, sort: 'new', priceTo: 0 }, 1),
+            ...olxUrls({ cityId: cfg.olxCityId, distance: cfg.olxDistance, sort: 'new', query: 'oddam' }, 1),
+            ...olxUrls({ cityId: cfg.olxCityId, distance: cfg.olxDistance, sort: 'new', query: 'za darmo' }, 1),
+          ],
+        }
+      : null,
     fetchedAt: new Date().toISOString(),
   };
 }

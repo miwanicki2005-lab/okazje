@@ -18,6 +18,7 @@ const oddam = ${JSON.stringify(fixture('allegro-oddam.html'))};
 const iphone = ${JSON.stringify(fixture('allegro-iphone.html'))};
 const vinted = ${JSON.stringify(fixture('vinted-rower.html'))};
 const mode = process.env.OLX_MODE;
+const vintedMode = process.env.VINTED_MODE;
 globalThis.fetch = async (url) => {
   url = String(url);
   if (url.includes('olx.pl')) {
@@ -29,6 +30,7 @@ globalThis.fetch = async (url) => {
     return new Response(html, { status: 200, headers: { 'content-type': 'text/html' } });
   }
   if (url.includes('vinted.pl')) {
+    if (vintedMode === 'blocked') return new Response('blocked', { status: 403 });
     return new Response(vinted, { status: 200, headers: { 'content-type': 'text/html' } });
   }
   throw new Error('unexpected ' + url);
@@ -142,6 +144,7 @@ test('userscript ma wstawiony adres serwera i token', async () => {
   assert.ok(body.includes(`'${BASE}'`));
   assert.ok(body.includes("'sekret'"));
   assert.ok(body.includes('@connect      127.0.0.1'));
+  assert.ok(body.includes('@connect      www.vinted.pl'));
   assert.ok(body.includes('@match        http://127.0.0.1/*'));
   assert.ok(!body.includes('__SERVER_'));
 });
@@ -157,6 +160,18 @@ test('gdy OLX blokuje serwer: Allegro działa, a frontend dostaje URL-e do pobra
   assert.ok(body.items.length > 0);
   assert.ok(body.fallback.olx[0].startsWith('https://www.olx.pl/api/v1/offers/'));
   const free = await get('/api/free?sources=olx,allegro');
-  assert.ok(free.body.fallback.olx.length >= 5);
+  assert.ok(free.body.fallback.olx.length >= 3);
   assert.ok(free.body.items.length > 0);
+
+});
+
+test('gdy Vinted blokuje serwer: API zwraca URL-e katalogu do mostu w przeglądarce', async () => {
+  proc.kill();
+  await new Promise((r) => setTimeout(r, 200));
+  proc = await startServer({ VINTED_MODE: 'blocked', OLX_MODE: 'blocked' });
+  const { body } = await get('/api/deals?q=koszulka&max=100&sources=vinted,allegro');
+  assert.equal(body.sources.vinted.ok, false);
+  assert.equal(body.sources.vinted.blocked, true);
+  assert.equal(body.sources.allegro.ok, true);
+  assert.ok(body.fallback.vinted[0].startsWith('https://www.vinted.pl/catalog'));
 });

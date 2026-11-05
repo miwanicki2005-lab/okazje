@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Okazje — import z grup FB (oddam za darmo / śmieciarka jedzie)
 // @namespace    okazje-wroclaw
-// @version      1.2.0
-// @description  Zbiera posty z wybranych grup Facebooka i wysyła je do Twojej aplikacji Okazje; pobiera też OLX z Twojego IP, gdy serwer jest zablokowany.
+// @version      1.4.0
+// @description  Zbiera posty z grup FB i mostkuje OLX + Vinted z Twojego IP (gdy hosting jest zablokowany).
 // @match        https://www.facebook.com/groups/*
 // @match        https://web.facebook.com/groups/*
 // @match        __SERVER_MATCH__
@@ -13,33 +13,81 @@
 // @connect      localhost
 // @connect      127.0.0.1
 // @connect      www.olx.pl
-// @run-at       document-idle
+// @connect      www.vinted.pl
+// @run-at       document-start
 // ==/UserScript==
 
 (function () {
   'use strict';
 
-  // Na stronie aplikacji skrypt działa jako "most" do API OLX: pobiera z Twojego domowego IP
-  // (OLX blokuje IP serwerów/hostingów, a z przeglądarki nie pozwala przez CORS).
+  // Na stronie aplikacji skrypt działa jako most do OLX/Vinted: pobiera z Twojego domowego IP
+  // (hostingi są często blokowane, a z przeglądarki CORS nie pozwala).
   if (!/facebook\.com$/.test(location.hostname)) {
+    const reply = (id, status, body, err) =>
+      window.postMessage({ type: 'okz-fetch-result', id, status, body: body || '', err: err || null }, location.origin);
+
+    function allowed(url) {
+      if (typeof url !== 'string') return null;
+      if (url.startsWith('https://www.olx.pl/api/v1/offers/')) {
+        return { referer: 'https://www.olx.pl/', accept: 'application/json, text/plain, */*', label: 'OLX' };
+      }
+      if (url.startsWith('https://www.vinted.pl/catalog')) {
+        return { referer: 'https://www.vinted.pl/', accept: 'text/html,application/xhtml+xml,*/*;q=0.8', label: 'Vinted' };
+      }
+      return null;
+    }
+
     window.addEventListener('message', (e) => {
       const m = e.data;
-      if (e.source !== window || !m || m.type !== 'okz-olx-fetch') return;
-      if (typeof m.url !== 'string' || !m.url.startsWith('https://www.olx.pl/api/v1/offers/')) return;
+      if (e.source !== window || !m) return;
+      if (m.type === 'okz-bridge-ping') {
+        window.postMessage({ type: 'okz-bridge-ready', version: '1.4.0' }, location.origin);
+        return;
+      }
+      // okz-olx-fetch zostawione dla kompatybilności ze starą stroną
+      if (m.type !== 'okz-fetch' && m.type !== 'okz-olx-fetch') return;
+      const meta = allowed(m.url);
+      if (!meta) {
+        reply(m.id, 0, '', 'zły URL (dozwolone: OLX API / Vinted katalog)');
+        return;
+      }
       GM_xmlhttpRequest({
         method: 'GET',
         url: m.url,
-        headers: { Accept: 'application/json' },
+        headers: {
+          Accept: meta.accept,
+          'Accept-Language': 'pl-PL,pl;q=0.9',
+          Referer: meta.referer,
+        },
+        anonymous: false,
         timeout: 20000,
-        onload: (r) => window.postMessage({ type: 'okz-olx-result', id: m.id, status: r.status, body: r.responseText }, location.origin),
-        onerror: () => window.postMessage({ type: 'okz-olx-result', id: m.id, status: 0, body: '' }, location.origin),
-        ontimeout: () => window.postMessage({ type: 'okz-olx-result', id: m.id, status: 0, body: '' }, location.origin),
+        onload: (r) => reply(m.id, r.status, r.responseText, r.status >= 400 ? `HTTP ${r.status}` : null),
+        onerror: () =>
+          reply(
+            m.id,
+            0,
+            '',
+            `brak połączenia z ${meta.label} (w Tampermonkey zezwól na domenę i otwórz raz stronę w tej przeglądarce)`,
+          ),
+        ontimeout: () => reply(m.id, 0, '', `timeout ${meta.label} — otwórz stronę w nowej karcie i spróbuj ponownie`),
       });
     });
-    document.documentElement.dataset.okzBridge = '1';
-    window.postMessage({ type: 'okz-bridge-ready' }, location.origin);
+    const mark = () => {
+      document.documentElement.dataset.okzBridge = '1';
+      window.postMessage({ type: 'okz-bridge-ready', version: '1.4.0' }, location.origin);
+    };
+    mark();
+    document.addEventListener('DOMContentLoaded', mark);
     return;
   }
+
+  const bootFb = () => {
+  if (document.body) startFbUi();
+  else document.addEventListener('DOMContentLoaded', startFbUi, { once: true });
+  };
+  bootFb();
+  function startFbUi() {
+
 
   const SERVER = GM_getValue('server', '__SERVER_URL__');
   const TOKEN = GM_getValue('token', '__IMPORT_TOKEN__');
@@ -339,4 +387,5 @@
   }, 1500);
 
   if (isEnabled()) start();
+  } // startFbUi
 })();
