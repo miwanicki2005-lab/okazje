@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d17">
+<title>Okazje Wrocław — tanio i za darmo</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="bg-glow"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">🔥</div>
+    <div>
+      <h1>Okazje <span id="cityName">Wrocław</span></h1>
+      <p class="tagline">OLX · Allegro Lokalnie · grupy FB — tanio i za darmo</p>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="deals" role="tab">💸 Okazje <span class="pill" id="badge-deals"></span></button>
+    <button class="tab" data-tab="free" role="tab">🎁 Za darmo <span class="pill" id="badge-free"></span></button>
+    <button class="tab" data-tab="saved" role="tab">⭐ Zapisane <span class="pill" id="badge-saved"></span></button>
+    <button class="tab" data-tab="fb" role="tab">👥 Grupy FB</button>
+  </nav>
+</header>
+
+<main>
+  <!-- OKAZJE -->
+  <section class="panel active" id="panel-deals">
+    <form class="filters" id="dealsForm" autocomplete="off">
+      <div class="field grow">
+        <label for="dq">Czego szukasz?</label>
+        <input id="dq" name="q" placeholder="np. iphone 13, ps5, rower szosowy, lodówka" enterkeyhint="search">
+      </div>
+      <div class="field small">
+        <label for="dmin">Cena od</label>
+        <input id="dmin" name="min" type="number" min="0" inputmode="numeric" placeholder="0">
+      </div>
+      <div class="field small">
+        <label for="dmax">Cena do</label>
+        <input id="dmax" name="max" type="number" min="0" inputmode="numeric" placeholder="1500">
+      </div>
+      <div class="field">
+        <label for="dexclude">Wyklucz słowa</label>
+        <input id="dexclude" name="exclude" placeholder="etui, szkło, uszkodzony">
+      </div>
+      <div class="field">
+        <label for="dsort">Sortuj</label>
+        <select id="dsort" name="sort">
+          <option value="new">Najnowsze</option>
+          <option value="price">Najtańsze</option>
+          <option value="below">Najbardziej poniżej rynku</option>
+        </select>
+      </div>
+      <div class="field toggles">
+        <label class="chk"><input type="checkbox" name="src_olx" checked> OLX</label>
+        <label class="chk"><input type="checkbox" name="src_allegro" checked> Allegro Lokalnie</label>
+        <label class="chk"><input type="checkbox" name="private"> Bez firm</label>
+        <label class="chk"><input type="checkbox" name="pearls"> Tylko perełki 🔥</label>
+      </div>
+      <div class="field actions">
+        <button class="btn primary" type="submit">Szukaj</button>
+      </div>
+    </form>
+    <div class="statusbar" id="dealsStatus"></div>
+    <div class="market" id="dealsMarket" hidden></div>
+    <div class="grid" id="dealsGrid"></div>
+    <div class="empty" id="dealsEmpty" hidden></div>
+  </section>
+
+  <!-- ZA DARMO -->
+  <section class="panel" id="panel-free">
+    <form class="filters" id="freeForm" autocomplete="off">
+      <div class="field grow">
+        <label for="fq">Filtruj</label>
+        <input id="fq" name="q" placeholder="np. szafa, krzesło, Krzyki, książki">
+      </div>
+      <div class="field">
+        <label for="fexclude">Wyklucz słowa</label>
+        <input id="fexclude" name="exclude" placeholder="gruz, ziemia">
+      </div>
+      <div class="field toggles">
+        <label class="chk"><input type="checkbox" name="src_olx" checked> OLX</label>
+        <label class="chk"><input type="checkbox" name="src_allegro" checked> Allegro Lokalnie</label>
+        <label class="chk"><input type="checkbox" name="src_fb" checked> Grupy FB</label>
+        <label class="chk"><input type="checkbox" name="wanted"> Pokaż „przyjmę / szukam”</label>
+        <label class="chk"><input type="checkbox" name="unseen"> Tylko nowe</label>
+      </div>
+      <div class="field actions">
+        <button class="btn primary" type="submit">Odśwież</button>
+      </div>
+    </form>
+    <div class="statusbar" id="freeStatus"></div>
+    <div class="grid" id="freeGrid"></div>
+    <div class="empty" id="freeEmpty" hidden></div>
+  </section>
+
+  <!-- ZAPISANE -->
+  <section class="panel" id="panel-saved">
+    <div class="statusbar"><span class="muted">Ogłoszenia, które oznaczyłeś gwiazdką. Trzymane w tej przeglądarce.</span></div>
+    <div class="grid" id="savedGrid"></div>
+    <div class="empty" id="savedEmpty">Nic jeszcze nie zapisałeś. Kliknij ☆ na ogłoszeniu.</div>
+  </section>
+
+  <!-- FB -->
+  <section class="panel" id="panel-fb">
+    <div class="fb-wrap">
+      <div class="card-box">
+        <h2>Jak to działa z grupami Facebooka?</h2>
+        <p>Facebook <b>nie udostępnia żadnego API</b> do czytania grup („Oddam za darmo Wrocław”, „Śmieciarka jedzie Wrocław” itd.), a posty widać tylko po zalogowaniu.
+          Dlatego zbiera je mały skrypt w <b>Twojej</b> przeglądarce: kiedy masz otwartą grupę, wysyła widoczne posty do tej aplikacji i od razu pojawiają się w zakładce „Za darmo”.</p>
+        <p>Ten sam skrypt pomaga też z <b>OLX</b>: OLX blokuje IP większości serwerów/hostingów, więc gdy aplikacja wisi na hostingu, skrypt pobiera oferty OLX z Twojego domowego internetu.</p>
+        <ol class="steps">
+          <li>Zainstaluj rozszerzenie <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener">Tampermonkey</a> (Chrome / Firefox / Edge / Opera).</li>
+          <li><span id="tokenRow" hidden>Wpisz token importu: <input id="importToken" placeholder="IMPORT_TOKEN"> i </span>kliknij:
+            <a class="btn primary" id="installScript" href="/fb-import.user.js" target="_blank">⬇ Zainstaluj skrypt importu</a></li>
+          <li>Wejdź na grupę (linki niżej), dołącz do niej i kliknij w prawym dolnym rogu <b>„Śledź tę grupę”</b>.</li>
+          <li>Zostaw kartę otwartą — skrypt sam przewija, przełącza na „Najnowsze posty” i co 10 minut odświeża grupę.</li>
+        </ol>
+        <p class="muted">Skrypt działa tylko na grupach, które sam włączysz, i wysyła dane wyłącznie do tej aplikacji.</p>
+      </div>
+      <div class="card-box">
+        <h2>Grupy do śledzenia</h2>
+        <div id="fbGroups" class="group-list"></div>
+        <div class="fb-stats" id="fbStats"></div>
+        <button class="btn ghost danger" id="fbClear" type="button">Wyczyść zapisane posty FB</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="autobar" id="autobar">
+  <label class="chk"><input type="checkbox" id="autoRefresh" checked> Auto-odświeżanie</label>
+  <select id="autoInterval">
+    <option value="60">co 1 min</option>
+    <option value="120" selected>co 2 min</option>
+    <option value="300">co 5 min</option>
+    <option value="900">co 15 min</option>
+  </select>
+  <span class="muted" id="countdown"></span>
+  <button class="btn ghost" id="notifyBtn" type="button">🔔 Powiadomienia</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<template id="cardTpl">
+  <article class="card">
+    <a class="thumb" target="_blank" rel="noopener">
+      <img loading="lazy" alt="">
+      <div class="noimg">📦</div>
+      <span class="src"></span>
+      <span class="new-badge">NOWE</span>
+    </a>
+    <div class="body">
+      <div class="price-row">
+        <span class="price"></span>
+        <span class="below"></span>
+      </div>
+      <a class="title" target="_blank" rel="noopener"></a>
+      <p class="desc"></p>
+      <div class="meta">
+        <span class="loc"></span>
+        <span class="time"></span>
+      </div>
+    </div>
+    <div class="card-actions">
+      <button class="icon star" title="Zapisz" type="button">☆</button>
+      <button class="icon hide" title="Ukryj to ogłoszenie" type="button">✕</button>
+    </div>
+  </article>
+</template>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
