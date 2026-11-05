@@ -125,21 +125,27 @@ function fillForm(form, data) {
 const bridgeWaiters = new Map();
 let bridgeSeq = 0;
 let bridgeReady = document.documentElement.dataset.okzBridge === '1';
-window.addEventListener('message', (e) => {
-  if (e.source !== window || !e.data) return;
-  if (e.data.type === 'okz-bridge-ready') {
+
+function onBridgeRes(detail) {
+  if (!detail) return;
+  if (detail.type === 'okz-bridge-ready') {
     bridgeReady = true;
     document.documentElement.dataset.okzBridge = '1';
     updateBridgeChip();
     return;
   }
-  if (e.data.type !== 'okz-fetch-result' && e.data.type !== 'okz-olx-result') return;
-  const w = bridgeWaiters.get(e.data.id);
+  if (detail.type !== 'okz-fetch-result' && detail.type !== 'okz-olx-result') return;
+  const w = bridgeWaiters.get(detail.id);
   if (!w) return;
-  bridgeWaiters.delete(e.data.id);
-  if (e.data.status >= 200 && e.data.status < 300) {
-    w.resolve(e.data.body);
-  } else w.reject(new Error(e.data.err || (e.data.status ? `HTTP ${e.data.status}` : 'brak połączenia')));
+  bridgeWaiters.delete(detail.id);
+  if (detail.status >= 200 && detail.status < 300) w.resolve(detail.body);
+  else w.reject(new Error(detail.err || (detail.status ? `HTTP ${detail.status}` : 'brak połączenia')));
+}
+
+document.documentElement.addEventListener('okz-bridge-res', (e) => onBridgeRes(e.detail));
+window.addEventListener('message', (e) => {
+  if (e.source !== window || !e.data) return;
+  onBridgeRes(e.data);
 });
 
 const hasBridge = () => bridgeReady || document.documentElement.dataset.okzBridge === '1';
@@ -152,7 +158,7 @@ function viaBridge(url) {
       bridgeWaiters.delete(id);
       reject(
         new Error(
-          'timeout — zainstaluj skrypt v1.4+, w Tampermonkey zezwól na www.olx.pl i www.vinted.pl, otwórz raz te strony w przeglądarce',
+          'timeout — przeinstaluj skrypt v1.4.3+ z zakładki Grupy FB (stary most nie łączy się ze stroną)',
         ),
       );
     }, 45000);
@@ -166,23 +172,31 @@ function viaBridge(url) {
         reject(e);
       },
     });
-    window.postMessage({ type: 'okz-fetch', id, url }, location.origin);
+    const detail = { type: 'okz-fetch', id, url };
+    document.documentElement.dispatchEvent(new CustomEvent('okz-bridge-req', { detail }));
+    window.postMessage(detail, location.origin);
   });
 }
 
 function waitForBridge(ms = 2500) {
   if (hasBridge()) return Promise.resolve(true);
+  document.documentElement.dispatchEvent(new CustomEvent('okz-bridge-req', { detail: { type: 'okz-bridge-ping' } }));
   window.postMessage({ type: 'okz-bridge-ping' }, location.origin);
   return new Promise((resolve) => {
+    const onEv = (e) => {
+      if (e.detail?.type === 'okz-bridge-ready') done(true);
+    };
     const onMsg = (e) => {
       if (e.source === window && e.data?.type === 'okz-bridge-ready') done(true);
     };
     const done = (v) => {
+      document.documentElement.removeEventListener('okz-bridge-res', onEv);
       window.removeEventListener('message', onMsg);
       clearTimeout(t);
       resolve(v);
     };
     const t = setTimeout(() => done(hasBridge()), ms);
+    document.documentElement.addEventListener('okz-bridge-res', onEv);
     window.addEventListener('message', onMsg);
   });
 }

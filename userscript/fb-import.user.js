@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Okazje — import z grup FB (oddam za darmo / śmieciarka jedzie)
 // @namespace    okazje-wroclaw
-// @version      1.4.2
+// @version      1.4.3
 // @description  Zbiera posty z grup FB i mostkuje OLX + Vinted z Twojego IP (gdy hosting jest zablokowany).
 // @match        https://www.facebook.com/groups/*
 // @match        https://web.facebook.com/groups/*
@@ -41,8 +41,17 @@
       return text.slice(from, from + 450000);
     }
 
-    const reply = (id, status, body, err) =>
-      window.postMessage({ type: 'okz-fetch-result', id, status, body: body || '', err: err || null }, location.origin);
+    // Komunikacja ze stroną przez CustomEvent na DOM — postMessage w sandboxie Tampermonkey
+    // (przy @grant GM_*) często nie dochodzi w obie strony, mimo że dataset.okzBridge działa.
+    const reply = (id, status, body, err) => {
+      const detail = { type: 'okz-fetch-result', id, status, body: body || '', err: err || null };
+      document.documentElement.dispatchEvent(new CustomEvent('okz-bridge-res', { detail }));
+      try {
+        window.postMessage(detail, location.origin);
+      } catch {
+        // sandbox bez postMessage — CustomEvent wystarczy
+      }
+    };
 
     function allowed(url) {
       if (typeof url !== 'string') return null;
@@ -55,14 +64,12 @@
       return null;
     }
 
-    window.addEventListener('message', (e) => {
-      const m = e.data;
-      if (e.source !== window || !m) return;
+    function handleReq(m) {
+      if (!m) return;
       if (m.type === 'okz-bridge-ping') {
-        window.postMessage({ type: 'okz-bridge-ready', version: '1.4.2' }, location.origin);
+        mark();
         return;
       }
-      // okz-olx-fetch zostawione dla kompatybilności ze starą stroną
       if (m.type !== 'okz-fetch' && m.type !== 'okz-olx-fetch') return;
       const meta = allowed(m.url);
       if (!meta) {
@@ -103,10 +110,24 @@
           reply(m.id, 0, '', `timeout ${meta.label} — otwórz stronę w nowej karcie i spróbuj ponownie`);
         },
       });
+    }
+
+    document.documentElement.addEventListener('okz-bridge-req', (e) => handleReq(e.detail));
+    window.addEventListener('message', (e) => {
+      // fallback + kompatybilność; NIE wymagaj e.source === window (w sandboxie TM to pada)
+      if (!e.data || (e.origin && e.origin !== location.origin && e.origin !== 'null')) return;
+      handleReq(e.data);
     });
+
     const mark = () => {
       document.documentElement.dataset.okzBridge = '1';
-      window.postMessage({ type: 'okz-bridge-ready', version: '1.4.2' }, location.origin);
+      document.documentElement.dataset.okzBridgeVer = '1.4.3';
+      document.documentElement.dispatchEvent(new CustomEvent('okz-bridge-res', { detail: { type: 'okz-bridge-ready', version: '1.4.3' } }));
+      try {
+        window.postMessage({ type: 'okz-bridge-ready', version: '1.4.3' }, location.origin);
+      } catch {
+        /* ignore */
+      }
     };
     mark();
     document.addEventListener('DOMContentLoaded', mark);
@@ -120,7 +141,7 @@
         'position:fixed;left:16px;bottom:16px;z-index:2147483647;background:#0f1220;color:#e8ecff;font:12px/1.4 system-ui,sans-serif;' +
         'border:1px solid #2b3158;border-radius:12px;padding:10px 12px;box-shadow:0 10px 30px rgba(0,0,0,.45);max-width:280px';
       box.innerHTML =
-        '<b>Most Okazje v1.4.2</b><div id="okz-br-st" style="opacity:.85;margin:6px 0">Gotowy — kliknij test albo Szukaj.</div>' +
+        '<b>Most Okazje v1.4.3</b><div id="okz-br-st" style="opacity:.85;margin:6px 0">Gotowy — kliknij test albo Szukaj.</div>' +
         '<button id="okz-br-vin" style="margin:2px 4px 0 0;background:#1f6f4a;color:#fff;border:0;border-radius:8px;padding:5px 8px;cursor:pointer">Test Vinted</button>' +
         '<button id="okz-br-olx" style="margin:2px 0 0;background:#1d2442;color:#fff;border:0;border-radius:8px;padding:5px 8px;cursor:pointer">Test OLX</button>';
       document.documentElement.appendChild(box);
