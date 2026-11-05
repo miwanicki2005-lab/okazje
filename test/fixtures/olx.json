@@ -1,0 +1,61 @@
+{
+  "data": [
+    {
+      "id": 1001,
+      "url": "https://www.olx.pl/d/oferta/szafa-oddam-za-darmo-CID628-ID1001.html",
+      "title": "Szafa oddam za darmo – odbiór Krzyki",
+      "description": "Szafa dwudrzwiowa,<br />stan dobry. Odbiór własny.",
+      "created_time": "2026-11-05T08:40:00+01:00",
+      "last_refresh_time": "2026-11-05T08:40:00+01:00",
+      "business": false,
+      "params": [
+        { "key": "price", "name": "Cena", "type": "price", "value": { "value": 0, "type": "free", "label": "Za darmo", "currency": "PLN", "negotiable": false } }
+      ],
+      "location": { "city": { "id": 19701, "name": "Wrocław" }, "district": { "id": 381, "name": "Krzyki" } },
+      "photos": [{ "id": 1, "link": "https://ireland.apollo.olxcdn.com:443/v1/files/abc/image;s={width}x{height}" }],
+      "promotion": { "highlighted": false, "top_ad": false }
+    },
+    {
+      "id": 1002,
+      "url": "https://www.olx.pl/d/oferta/iphone-13-128gb-CID99-ID1002.html",
+      "title": "iPhone 13 128GB",
+      "description": "Sprawny, bateria 88%",
+      "created_time": "2026-11-05T07:00:00+01:00",
+      "last_refresh_time": "2026-11-05T08:00:00+01:00",
+      "business": true,
+      "params": [
+        { "key": "price", "name": "Cena", "type": "price", "value": { "value": 1450, "type": "price", "label": "1 450 zł", "currency": "PLN", "negotiable": true } },
+        { "key": "state", "name": "Stan", "type": "select", "value": { "key": "used", "label": "Używane" } }
+      ],
+      "location": { "city": { "id": 19701, "name": "Wrocław" } },
+      "photos": [],
+      "promotion": { "highlighted": true, "top_ad": false }
+    },
+    {
+      "id": 1003,
+      "url": "https://www.olx.pl/d/oferta/zamienie-rower-CID99-ID1003.html",
+      "title": "Zamienię rower na hulajnogę",
+      "description": "",
+      "created_time": "2026-11-04T10:00:00+01:00",
+      "params": [
+        { "key": "price", "name": "Cena", "type": "price", "value": { "type": "exchange", "label": "Zamienię" } }
+      ],
+      "location": { "city": { "id": 19701, "name": "Wrocław" } },
+      "photos": []
+    },
+    {
+      "id": 1004,
+      "url": "https://www.olx.pl/d/oferta/przyjme-lodowke-CID99-ID1004.html",
+      "title": "Przyjmę lodówkę za darmo",
+      "description": "",
+      "created_time": "2026-11-05T06:00:00+01:00",
+      "params": [
+        { "key": "price", "name": "Cena", "type": "price", "value": { "value": 0, "type": "free", "label": "Za darmo" } }
+      ],
+      "location": { "city": { "id": 19701, "name": "Wrocław" } },
+      "photos": []
+    }
+  ],
+  "metadata": { "total_elements": 4, "visible_total_count": 4 },
+  "links": { "self": { "href": "x" } }
+}
