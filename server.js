@@ -7,10 +7,12 @@ import { FacebookStore } from './src/sources/facebook.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(ROOT, 'public');
-const PORT = Number(process.env.PORT || 3000);
+// Passenger potrafi podać zamiast numeru ścieżkę do gniazda.
+const PORT = /^\d+$/.test(process.env.PORT || '') ? Number(process.env.PORT) : process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const IMPORT_TOKEN = process.env.IMPORT_TOKEN || '';
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
+const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/+$/, '');
 
 const cfg = loadConfig();
 const fbStore = new FacebookStore(path.join(DATA_DIR, 'facebook-posts.json'));
@@ -58,7 +60,14 @@ function readBody(req, limit = 2_000_000) {
 }
 
 function origin(req) {
-  const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0] || (req.socket.encrypted ? 'https' : 'http');
+  if (PUBLIC_URL) return PUBLIC_URL;
+  let cfScheme = null;
+  try {
+    cfScheme = JSON.parse(req.headers['cf-visitor'] || '{}').scheme;
+  } catch {
+    // nagłówek spoza Cloudflare
+  }
+  const proto = cfScheme || String(req.headers['x-forwarded-proto'] || '').split(',')[0] || (req.socket.encrypted ? 'https' : 'http');
   const host = req.headers['x-forwarded-host'] || req.headers.host;
   return `${proto}://${host}`;
 }
@@ -142,6 +151,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(`Okazje ${cfg.cityName} działa na http://localhost:${PORT}`);
-});
+const onListen = () => console.log(`Okazje ${cfg.cityName} działa na http://localhost:${PORT}`);
+if (typeof PORT === 'number') server.listen(PORT, HOST, onListen);
+else server.listen(PORT, onListen);

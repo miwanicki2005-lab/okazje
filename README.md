@@ -29,6 +29,15 @@ Aplikacja potrzebuje **Node.js** (zwykły hosting „tylko PHP” nie wystarczy)
 | Render / Railway / Fly.io | Wskaż repo, komenda startu `npm start` (albo Dockerfile) |
 | Docker | `docker build -t okazje . && docker run -d -p 3000:3000 -v okazje-data:/app/data okazje` |
 
+### Seohost (DirectAdmin) + Cloudflare
+
+1. DirectAdmin → **Menedżer plików** → utwórz katalog `apps/okazje` (poza `public_html`) i wgraj tam zawartość repo (ZIP → *Rozpakuj*).
+2. DirectAdmin → **Setup Node.js App** → *Create Application*: Node.js **22**, tryb **Production**, *Application root* `apps/okazje`, *Application URL* Twoja domena, *Application startup file* **`app.cjs`**.
+3. Zmienne środowiskowe: `IMPORT_TOKEN` (dowolne hasło) i `PUBLIC_URL` (np. `https://okazje.twojadomena.pl`). *Create* → *Restart*.
+4. Cloudflare: rekord DNS `A` na IP serwera Seohost (pomarańczowa chmurka), SSL/TLS **Full (strict)**, wyłącz **Rocket Loader**.
+
+Po każdej zmianie plików kliknij *Restart* w Setup Node.js App. Błędy są w `stderr.log` w katalogu aplikacji.
+
 ### ⚠ Ważne: OLX blokuje IP serwerowni
 
 OLX (przez CloudFront) odrzuca zapytania z IP wielu chmur/hostingów (HTTP 403). Aplikacja radzi sobie z tym tak:
@@ -60,6 +69,7 @@ Skrypt działa tylko na grupach, które sam włączysz. Posty trzymane są w `da
 | `ALLEGRO_CITY` | `wroclaw` | slug miasta w Allegro Lokalnie |
 | `IMPORT_TOKEN` | — | **ustaw na publicznym hostingu**, żeby nikt obcy nie wrzucał postów do importu FB |
 | `FB_GROUPS` | wyszukiwarka FB | lista grup: `Nazwa\|https://www.facebook.com/groups/123,Inna\|https://...` |
+| `PUBLIC_URL` | wykrywany | publiczny adres aplikacji (wstawiany do skryptu Tampermonkey) |
 | `DATA_DIR` | `./data` | gdzie zapisywać posty FB |
 | `CACHE_TTL_SECONDS` | `90` | cache zapytań do serwisów (żeby nie dostać bana) |
 
