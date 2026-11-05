@@ -1,0 +1,9 @@
+{
+  "name": "Okazje Wrocław",
+  "short_name": "Okazje",
+  "start_url": "/#free",
+  "display": "standalone",
+  "background_color": "#0b0d17",
+  "theme_color": "#0b0d17",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}
