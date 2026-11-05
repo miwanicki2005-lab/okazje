@@ -155,7 +155,7 @@ function viaBridge(url) {
           'timeout — zainstaluj skrypt v1.4+, w Tampermonkey zezwól na www.olx.pl i www.vinted.pl, otwórz raz te strony w przeglądarce',
         ),
       );
-    }, 22000);
+    }, 45000);
     bridgeWaiters.set(id, {
       resolve: (v) => {
         clearTimeout(t);
