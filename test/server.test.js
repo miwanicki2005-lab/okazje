@@ -16,6 +16,7 @@ const preload = `
 const olx = ${JSON.stringify(fixture('olx.json'))};
 const oddam = ${JSON.stringify(fixture('allegro-oddam.html'))};
 const iphone = ${JSON.stringify(fixture('allegro-iphone.html'))};
+const vinted = ${JSON.stringify(fixture('vinted-rower.html'))};
 const mode = process.env.OLX_MODE;
 globalThis.fetch = async (url) => {
   url = String(url);
@@ -26,6 +27,9 @@ globalThis.fetch = async (url) => {
   if (url.includes('allegrolokalnie.pl')) {
     const html = /oddam|darmo|gratis/.test(decodeURIComponent(url)) ? oddam : iphone;
     return new Response(html, { status: 200, headers: { 'content-type': 'text/html' } });
+  }
+  if (url.includes('vinted.pl')) {
+    return new Response(vinted, { status: 200, headers: { 'content-type': 'text/html' } });
   }
   throw new Error('unexpected ' + url);
 };
@@ -70,15 +74,17 @@ test('strona główna i pliki statyczne', async () => {
   }
 });
 
-test('/api/deals łączy OLX i Allegro, filtruje cenę i liczy medianę', async () => {
-  const { status, body } = await get('/api/deals?q=iphone&min=400&max=1500&sources=olx,allegro');
+test('/api/deals łączy OLX, Allegro i Vinted, filtruje cenę i liczy medianę', async () => {
+  const { status, body } = await get('/api/deals?q=iphone&min=20&max=1500&sources=olx,allegro,vinted');
   assert.equal(status, 200);
   assert.equal(body.sources.olx.ok, true);
   assert.equal(body.sources.allegro.ok, true);
+  assert.equal(body.sources.vinted.ok, true);
   assert.ok(body.items.length > 10);
-  assert.ok(body.items.every((i) => i.price >= 400 && i.price <= 1500));
+  assert.ok(body.items.every((i) => i.price >= 20 && i.price <= 1500));
   assert.ok(body.items.some((i) => i.source === 'olx'));
   assert.ok(body.items.some((i) => i.source === 'allegro'));
+  assert.ok(body.items.some((i) => i.source === 'vinted'));
   assert.ok(body.marketMedian > 0);
   assert.ok(body.items.some((i) => Number.isFinite(i.belowPct)));
   assert.ok(body.items.filter((i) => i.price < body.marketMedian * 0.25).every((i) => i.belowPct == null));

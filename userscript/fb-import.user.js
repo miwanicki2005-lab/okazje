@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Okazje — import z grup FB (oddam za darmo / śmieciarka jedzie)
 // @namespace    okazje-wroclaw
-// @version      1.1.0
+// @version      1.2.0
 // @description  Zbiera posty z wybranych grup Facebooka i wysyła je do Twojej aplikacji Okazje; pobiera też OLX z Twojego IP, gdy serwer jest zablokowany.
 // @match        https://www.facebook.com/groups/*
 // @match        https://web.facebook.com/groups/*
@@ -108,7 +108,10 @@
   render();
 
   // ---------- ekstrakcja ----------
-  const PERMALINK_RE = /\/groups\/[^/]+\/(?:posts|permalink)\/(\d+)|[?&](?:story_fbid|multi_permalinks|fbid)=(\d+)|\/posts\/(pfbid\w+)/;
+  const PERMALINK_RE =
+    /\/groups\/[^/]+\/(?:posts|permalink)\/(\d+)|[?&](?:story_fbid|multi_permalinks)=(\d+)|\/posts\/(pfbid\w+)/;
+  // Zdjęcia w grupie: photo/?fbid=…&set=pcb.POST_ID albo set=gm.POST_ID — z tego da się zbudować link do posta.
+  const PHOTO_SET_RE = /[?&]set=(?:pcb|gm)\.(\d+)/;
 
   function groupName() {
     return (document.querySelector('h1')?.innerText || document.title).replace(/\s*\|\s*Facebook\s*$/, '').trim();
@@ -125,13 +128,28 @@
 
   function hoverLinks(node) {
     // FB uzupełnia href linku z datą dopiero po najechaniu myszą.
-    node.querySelectorAll('a[role="link"]:not([data-okz])').forEach((a) => {
+    node.querySelectorAll('a[href]').forEach((a) => {
+      if (a.dataset.okzHover) return;
       const h = a.getAttribute('href') || '';
-      if (h === '#' || h === '' || /\/groups\/[^/]+\/?$/.test(h) || a.querySelector('span[id], b, use')) {
-        a.setAttribute('data-okz', '1');
-        ['mouseover', 'mouseenter', 'focus'].forEach((t) => a.dispatchEvent(new MouseEvent(t, { bubbles: true })));
+      if (h === '#' || h === '' || /\/groups\/[^/]+\/?(\?|$)/.test(h) || /story\.php|permalink\.php/.test(h) || a.querySelector('span[id], b, use, abbr')) {
+        a.dataset.okzHover = '1';
+        ['mouseover', 'mouseenter', 'focus', 'pointerover'].forEach((t) => a.dispatchEvent(new MouseEvent(t, { bubbles: true, view: window })));
       }
     });
+  }
+
+  function postUrlFromHref(href, gk) {
+    if (!href) return null;
+    let m = href.match(/\/groups\/([^/]+)\/(?:posts|permalink)\/(\d+|pfbid\w+)/);
+    if (m) return { id: m[2], url: `https://www.facebook.com/groups/${m[1]}/posts/${m[2]}/` };
+    m = href.match(PERMALINK_RE);
+    if (m) {
+      const id = m[1] || m[2] || m[3];
+      return { id, url: `https://www.facebook.com/groups/${gk}/posts/${id}/` };
+    }
+    m = href.match(PHOTO_SET_RE);
+    if (m) return { id: m[1], url: `https://www.facebook.com/groups/${gk}/posts/${m[1]}/` };
+    return null;
   }
 
   function expandSeeMore(node) {
@@ -179,21 +197,26 @@
     const text = textOf(node);
     const image = imageOf(node);
     if (!text && !image) return null;
-    let url = null;
-    let id = null;
-    for (const a of node.querySelectorAll('a[href]')) {
-      const m = a.href.match(PERMALINK_RE);
-      if (m && !a.closest('[role="article"] [role="article"]')) {
-        id = m[1] || m[2] || m[3];
-        url = a.href.split('?')[0].includes('/posts/') ? a.href.split('?')[0] : a.href;
-        break;
-      }
-    }
     const gk = groupKey();
-    const groupUrl = `${location.origin}/groups/${gk}/`;
+    const groupUrl = `https://www.facebook.com/groups/${gk}/`;
+    let best = null;
+    for (const a of node.querySelectorAll('a[href]')) {
+      if (a.closest('[role="article"] [role="article"]')) continue;
+      const found = postUrlFromHref(a.href, gk);
+      if (!found) continue;
+      // Preferuj klasyczny /posts/ID nad samym fbid ze zdjęcia.
+      if (!best || /\/posts\//.test(found.url)) best = found;
+      if (/\/posts\//.test(found.url) && !/photo/.test(a.href)) break;
+    }
+    // Ostateczność: id posta ze zdjęcia w srcset / HTML węzła.
+    if (!best) {
+      const html = node.innerHTML || '';
+      const set = html.match(PHOTO_SET_RE) || html.match(/\/posts\/(\d+)/);
+      if (set) best = { id: set[1], url: `https://www.facebook.com/groups/${gk}/posts/${set[1]}/` };
+    }
     return {
-      id: `fb:${gk}:${id || hash(text.slice(0, 300) + (image || ''))}`,
-      url: url || groupUrl,
+      id: `fb:${gk}:${best?.id || hash(text.slice(0, 300) + (image || ''))}`,
+      url: best?.url || groupUrl,
       groupUrl,
       text,
       image,
@@ -207,11 +230,22 @@
     for (const node of postNodes()) {
       hoverLinks(node);
       expandSeeMore(node);
-      const p = extract(node);
-      if (!p) continue;
-      const sig = `${p.url}|${p.text.length}|${p.image || ''}`;
-      if (sent.get(p.id) === sig) continue;
-      queue.set(p.id, { p, sig });
+      // Daj FB chwilę na uzupełnienie href po hoverze.
+      const run = () => {
+        const p = extract(node);
+        if (!p) return;
+        // Nie wysyłaj samego linku do grupy, jeśli da się poczekać na permalink (chyba że już długo).
+        const isGroupOnly = p.url === p.groupUrl || /\/groups\/[^/]+\/?$/.test(p.url.split('?')[0]);
+        if (isGroupOnly) {
+          node.__okzTries = (node.__okzTries || 0) + 1;
+          if (node.__okzTries < 4) return;
+        }
+        const sig = `${p.url}|${p.text.length}|${p.image || ''}`;
+        if (sent.get(p.id) === sig) return;
+        queue.set(p.id, { p, sig });
+      };
+      clearTimeout(node.__okzT);
+      node.__okzT = setTimeout(run, 400);
     }
   }
 

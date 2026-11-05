@@ -21,7 +21,7 @@ const QUICK = [
   ['lodówka', 400],
   ['telewizor', 600],
 ];
-const SOURCE_NAMES = { olx: 'OLX', allegro: 'Allegro Lokalnie', fb: 'Grupy FB' };
+const SOURCE_NAMES = { olx: 'OLX', allegro: 'Allegro Lokalnie', vinted: 'Vinted', fb: 'Grupy FB' };
 
 // ---------- pamięć przeglądarki ----------
 const store = {
@@ -315,7 +315,7 @@ function updateBadges() {
 function dealsParams() {
   const f = formData($('#dealsForm'));
   store.set('dealsForm', f);
-  const sources = ['olx', 'allegro'].filter((s) => f[`src_${s}`]);
+  const sources = ['olx', 'allegro', 'vinted'].filter((s) => f[`src_${s}`]);
   const p = new URLSearchParams({ q: f.q.trim(), sort: f.sort, sources: sources.join(','), exclude: f.exclude });
   if (f.min !== '') p.set('min', f.min);
   if (f.max !== '') p.set('max', f.max);
